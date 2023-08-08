@@ -1,8 +1,16 @@
 MASS_RANGE_FILE = "A_min_max.txt"
+####################################################################
+#
+# This file is part of exfor-parser.
+# Copyright (C) 2022 International Atomic Energy Agency (IAEA)
+#
+# Disclaimer: The code is still under developments and not ready
+#             to use. It has been made public to share the progress
+#             among collaborators.
+# Contact:    nds.contact-point@iaea.org
+#
+####################################################################
 
-# ------------------------------------------------------------------------------
-# Mass
-# ------------------------------------------------------------------------------
 def read_mass_range():
     mass_range = {}
     with open(MASS_RANGE_FILE) as f:

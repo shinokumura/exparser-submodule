@@ -1,6 +1,6 @@
 ####################################################################
 #
-# This file is part of exfor-parser.
+# This file is a part of exfor-parser modules.
 # Copyright (C) 2022 International Atomic Energy Agency (IAEA)
 #
 # Disclaimer: The code is still under developments and not ready
@@ -157,6 +157,16 @@ def elemtoz(elem):
         z = ELEMS.index(elem)
         z = z + 1
         z = str(z).zfill(3)
+    except ValueError:
+        z = ""
+    return z
+
+
+def elemtoz_nz(elem):
+    try:
+        z = ELEMS.index(elem)
+        z = z + 1
+        z = str(z)
     except ValueError:
         z = ""
     return z
