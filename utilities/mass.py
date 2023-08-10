@@ -20,3 +20,5 @@ def read_mass_range():
             z_mass = z.split(",")
             mass_range[z_mass[0]] = {"min": z_mass[1].strip(), "max": z_mass[2].strip()}
     return mass_range
+
+mass_range = read_mass_range()
