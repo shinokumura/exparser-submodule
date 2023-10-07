@@ -8,7 +8,7 @@ from endftables_sql.models import (
     Endf_N_Residual_Data,
     Endf_FY_Data,
 )
-from func import get_number_from_string, get_str_from_string
+from submodules.utilities.util import get_number_from_string, get_str_from_string
 
 
 

@@ -1,13 +1,13 @@
 import pandas as pd
 from collections import OrderedDict
 from operator import getitem
-
+from sqlalchemy import func
 
 from submodules.utilities.elem import elemtoz_nz
 from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
 from config import session, engines
-from func import energy_range_conversion, get_number_from_string, get_str_from_string
-from sqlalchemy import func
+from submodules.utilities.util import get_number_from_string, get_str_from_string
+
 
 connection = engines["exfor"].connect()
 
@@ -287,12 +287,12 @@ def fy_branch(branch):
 
 
 def reaction_query_fy(
-    type, elem, mass, reaction, branch, mesurement_opt_fy, energy_range
+    type, elem, mass, reaction, branch, mesurement_opt_fy, lower, upper 
 ):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
 
     target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
-    lower, upper = energy_range_conversion(energy_range)
+
 
     reac = (
         session()
@@ -331,7 +331,7 @@ def reaction_query_fy(
     return entries
 
 
-def reaction_query_fission(type, elem, mass, reaction, branch, energy_range):
+def reaction_query_fission(type, elem, mass, reaction, branch, lower, upper ):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
     sf4 = None
     sf5 = None
@@ -374,8 +374,8 @@ def reaction_query_fission(type, elem, mass, reaction, branch, energy_range):
     if sf6:
         queries.append(Exfor_Indexes.sf6.in_(tuple(sf6)))
 
-    if energy_range:
-        lower, upper = energy_range_conversion(energy_range)
+    if lower and upper :
+        # lower, upper = energy_range_conversion(energy_range)
         queries.append(Exfor_Indexes.e_inc_min >= lower)
         queries.append(Exfor_Indexes.e_inc_max <= upper)
 
