@@ -24,6 +24,18 @@ def slices(s, *args):
         position += length
 
 
+
+
+def get_number_from_string(str):
+    return re.sub(r"\D+", "", str)
+
+
+
+def get_str_from_string(str):
+    return re.sub(r"\d+", "", str)
+
+
+
 def flatten(xs):
     from collections.abc import Iterable
 
