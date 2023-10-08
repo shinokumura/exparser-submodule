@@ -138,6 +138,16 @@ def reaction_query_simple(type, elem, mass, reaction, branch):
 
 
 
+def bib_query(entries):
+    queries = [Exfor_Bib.entry.in_(tuple(entries))]
+    indexes = session().query(Exfor_Bib).filter(*queries)
+    df = pd.read_sql(
+        sql=indexes.statement,
+        con=connection,
+    ) 
+    return df
+
+
 
 def index_query_by_bib(entries):
     queries = [Exfor_Indexes.entry.in_(tuple(entries))]
