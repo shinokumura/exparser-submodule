@@ -26,6 +26,392 @@ def get_exfor_indexes_table():
     return df
 
 
+
+
+########  -------------------------------------------- ##########
+##      EXFOR entry queries for the dataexplorer/api/exfor     ##
+########  -------------------------------------------- ##########
+def entries_query(**kwargs):
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+    connection = engines["exfor"].connect()
+    queries = []
+    elem = kwargs.get("target_elem")
+    mass = kwargs.get("target_mass")
+    reaction = kwargs.get("reaction")
+
+    methods = kwargs.get("method")
+    facility = kwargs.get("facility")
+    institute = kwargs.get("institute")
+    detectors = kwargs.get("detector")
+
+    ## From reaction code
+    sf6 = kwargs.get("sf6")  # SF6
+    sf5 = kwargs.get("sf5")  # SF6
+    sf4 = kwargs.get("sf4")  # SF6
+    sf7 = kwargs.get("sf7")  # SF6
+    sf8 = kwargs.get("sf8")  # SF6
+
+    if elem and mass:
+        target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+        queries.append(Exfor_Reactions.target == target)
+    if reaction:
+        queries.append(Exfor_Reactions.process == reaction.upper())
+    if sf6:
+        queries.append(Exfor_Reactions.sf6 == sf6.upper())
+    if sf5:
+        queries.append(Exfor_Reactions.sf5 == sf5)
+    if sf4:
+        queries.append(Exfor_Reactions.sf4 == sf4)
+    if sf7:
+        queries.append(Exfor_Reactions.sf7 == sf7)
+    if sf8:
+        queries.append(Exfor_Reactions.sf8 == sf8)
+    if  institute:
+        queries.append(Exfor_Bib.main_facility_institute == institute)
+    if facility:
+        queries.append(Exfor_Bib.main_facility_type == facility)
+
+    reac = (
+        session()
+        .query(Exfor_Reactions, Exfor_Bib)
+        .filter(*queries)
+        .join(Exfor_Bib, Exfor_Reactions.entry == Exfor_Bib.entry, isouter=False)
+        .distinct()
+    )
+
+    df = pd.read_sql(
+        sql=reac.statement,
+        con=connection,
+    )
+    # print(df)
+    return df
+
+
+
+def facility_query(facility_code, facility_type):
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+    connection = engines["exfor"].connect()
+
+    queries = [
+        Exfor_Indexes.main_facility_institute == facility_code,
+        Exfor_Indexes.main_facility_type == facility_type.upper(),
+    ]
+
+    reac = (
+        session()
+        .query(Exfor_Indexes, Exfor_Bib)
+        .filter(*queries)
+        .join(Exfor_Bib, Exfor_Indexes.entry == Exfor_Bib.entry, isouter=True)
+        .distinct()
+    )
+
+    df = pd.read_sql(
+        sql=reac.statement,
+        con=connection,
+    )
+    # print(df)
+    return df
+
+
+
+########  -------------------------------------- ##########
+##         Reaction queries for the dataexplorer
+########  -------------------------------------- ##########
+def index_query(type, elem, mass, reaction, branch=None, rp_elem=None, rp_mass=None) -> dict:
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+    # print("index_query")
+    reac = None
+    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+
+    queries = [Exfor_Indexes.target == target, Exfor_Indexes.arbitrary_data == False]
+
+    if branch:
+        if branch == "PAR":
+            queries.append(Exfor_Indexes.sf5 == branch)
+
+        elif isinstance(branch, int):
+            queries.append(Exfor_Indexes.sf5 == "PAR")
+            queries.append(Exfor_Indexes.level_num == branch)
+
+        elif type == "FY":
+            queries.append(Exfor_Indexes.sf5 == branch.upper())
+
+    else:
+        queries.append(Exfor_Indexes.sf5 == None)
+
+    if type == "Residual":
+        type = "SIG"
+
+        if rp_mass.endswith(("m", "M", "g", "G")):
+            residual = (
+                rp_elem.capitalize()
+                + "-"
+                + str(get_number_from_string(rp_mass))
+                + "-"
+                + get_str_from_string(str(rp_mass)).upper()
+            )
+
+        else:
+            residual = rp_elem.capitalize() + "-" + str(rp_mass)
+
+        queries.append(Exfor_Indexes.projectile == reaction.upper())
+        queries.append(Exfor_Indexes.residual == residual)
+
+    else:
+        queries.append(Exfor_Indexes.process == reaction.replace("total", "tot").upper())
+        queries.append(Exfor_Indexes.sf7 == None)
+        queries.append(Exfor_Indexes.sf8 == None)
+
+
+        if not any(r in reaction for r in ("tot", "f")):
+            queries.append(~Exfor_Indexes.sf4.endswith("-G"))
+            queries.append(~Exfor_Indexes.sf4.endswith("-M"))
+
+    queries.append(Exfor_Indexes.sf6 == type.upper())
+    reac = session().query(Exfor_Indexes).filter(*queries).all()
+
+    entries = {}
+    # sum_points = 0
+    if reac:
+        for ent in reac:
+            entries[ent.entry_id] = {
+                "e_inc_min": ent.e_inc_min,
+                "e_inc_max": ent.e_inc_max,
+                "points": ent.points,
+                "sf5": ent.sf5,
+                "sf8": ent.sf8,
+                "x4_code": ent.x4_code,
+                "mt": ent.mt,
+                "mf": ent.mf,
+            }
+            # sum_points += ent.points
+
+        # entries["total_points"] = sum_points
+
+    return entries
+
+
+def get_entry_bib(entries):
+    bib = session().query(Exfor_Bib).filter(Exfor_Bib.entry.in_(tuple(entries))).all()
+
+    legend = {}
+
+    for b in bib:
+        legend[b.entry] = {
+            "author": b.first_author,
+            "year": b.year if b.year else 1900,  ## Comments SO: should be int in SQL
+        }
+
+    return OrderedDict(
+        sorted(legend.items(), key=lambda x: getitem(x[1], "year"), reverse=True),
+    )
+
+
+def index_query_by_bib(entries):
+    queries = [Exfor_Indexes.entry.in_(tuple(entries))]
+    # bib = session().query(Exfor_Indexes).filter().all()
+
+    indexes = session().query(Exfor_Indexes).filter(*queries)
+    df = pd.read_sql(
+        sql=indexes.statement,
+        con=connection,
+    ) 
+
+    return df
+
+
+def data_query(entids, branch=None):
+    connection = engines["exfor"].connect()
+    queries = [Exfor_Data.entry_id.in_(tuple(entids))]
+
+    if branch:
+        if isinstance(branch, int):
+            queries.append(Exfor_Data.level_num == branch)
+
+    data = session().query(Exfor_Data).filter(*queries)
+
+    df = pd.read_sql(
+        sql=data.statement,
+        con=connection,
+    )
+
+    return df
+
+
+######## -------------------------------------- ########
+#    Queries for FY
+######## -------------------------------------- ########
+def fy_branch(branch):
+    if branch == "PRE":
+        return ["PRE", "TER", "QTR", "PRV", "TER/CHG"]
+
+    if branch == "IND":
+        return ["IND", "SEC", "MAS", "CHG", "SEC/CHN"]
+
+    if branch == "CUM":
+        return ["CUM", "CHN"]
+
+
+def index_query_fy(
+    type, elem, mass, reaction, branch, mesurement_opt_fy=None, lower=None, upper=None
+):
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+
+    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+
+    queries = [
+            Exfor_Indexes.target == target,
+            Exfor_Indexes.process == reaction.upper(),
+            Exfor_Indexes.sf6 == "FY",
+            Exfor_Indexes.arbitrary_data == False
+    ]
+
+    if branch:
+        queries.append(Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
+    if lower:
+        queries.append(Exfor_Indexes.e_inc_min >= lower)
+    if upper:
+        queries.append(Exfor_Indexes.e_inc_max <= upper)
+    if mesurement_opt_fy:
+        queries.append(
+                Exfor_Indexes.sf4 == "MASS"
+                if mesurement_opt_fy == "A"
+                else Exfor_Indexes.sf4 == "ELEM"
+                if mesurement_opt_fy == "Z"
+                else Exfor_Indexes.sf4.isnot(None)
+            )
+
+    reac = (
+        session()
+        .query(Exfor_Indexes)
+        .filter(*queries)
+        .all()
+    )
+
+    entries = {}
+    current = None
+    residuals = []
+    for ent in reac:
+        if current != ent.entry_id:
+            residuals = []
+        residuals.append(ent.residual)
+        entries[ent.entry_id] = {
+            "e_inc_min": ent.e_inc_min,
+            "e_inc_max": ent.e_inc_max,
+            "points": ent.points,
+            "sf8": ent.sf8,
+            "residuals": residuals,
+            "x4_code": ent.x4_code,
+        }
+        current = ent.entry_id
+    return entries
+
+
+def index_query_fission(type, elem, mass, reaction, branch, lower, upper ):
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+    sf4 = None
+    sf5 = None
+    sf6 = None
+    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+
+    queries = [
+        Exfor_Indexes.target == target,
+        Exfor_Indexes.process == reaction.upper(),
+        Exfor_Indexes.arbitrary_data == False,
+    ]
+
+    if branch == "nu_n":
+        sf5 = ["PR"]
+        sf6 = ["NU"]
+    elif branch == "nu_g":
+        sf4 = "0-G-0"
+        sf5 = ["PR"]
+        sf6 = ["FY"]
+    elif branch == "dn":
+        sf5 = ["DL"]
+        sf6 = ["NU"]
+    elif branch == "pfns":
+        sf5 = ["PR"]
+        sf6 = ["NU/DE"]
+    elif branch == "pfgs":
+        sf4 = "0-G-0"
+        sf5 = ["PR"]
+        sf6 = ["FY/DE"]
+    else:
+        ## to avoid large query
+        return None, None
+
+    if sf4:
+        queries.append(Exfor_Indexes.sf4 == sf4)
+
+    if sf5:
+        queries.append(Exfor_Indexes.sf5.in_(tuple(sf5)))
+
+    if sf6:
+        queries.append(Exfor_Indexes.sf6.in_(tuple(sf6)))
+
+    if lower and upper :
+        # lower, upper = energy_range_conversion(energy_range)
+        queries.append(Exfor_Indexes.e_inc_min >= lower)
+        queries.append(Exfor_Indexes.e_inc_max <= upper)
+
+    reac = session().query(Exfor_Indexes).filter(*queries).all()
+
+    entids = {}
+    entries = []
+
+    for ent in reac:
+        entids[ent.entry_id] = {
+            "e_inc_min": ent.e_inc_min,
+            "e_inc_max": ent.e_inc_max,
+            "points": ent.points,
+            "sf5": ent.sf5,
+            "sf8": ent.sf8,
+            "x4_code": ent.x4_code,
+        }
+        entries += [ent.entry]
+    # print(entids)
+
+    return entids, entries
+
+
+def index_query_simple(type, elem, mass, reaction, branch):
+    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+    connection = engines["exfor"].connect()
+    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+
+    queries = [
+        Exfor_Indexes.target == target,
+        Exfor_Indexes.process == reaction.upper(),
+        Exfor_Indexes.sf6 == type.upper(),
+        Exfor_Indexes.arbitrary_data == False,
+    ]
+
+    if branch == "PAR":
+        queries.append(Exfor_Indexes.sf5 == branch)
+
+    elif isinstance(branch, int):
+        queries.append(Exfor_Indexes.level_num == branch)
+
+    reac = (
+        session()
+        .query(Exfor_Indexes, Exfor_Bib)
+        .filter(*queries)
+        .join(Exfor_Bib, Exfor_Indexes.entry == Exfor_Bib.entry, isouter=True)
+        .distinct()
+    )
+
+    df = pd.read_sql(
+        sql=reac.statement,
+        con=connection,
+    )
+    # print(df)
+    return df
+
+
+
+
+
 ########  -------------------------------------- ##########
 ##         Join table for AGGrid
 ########  -------------------------------------- ##########
@@ -100,338 +486,3 @@ def join_index_bib():
 
     return df
 
-
-
-
-def reaction_query_simple(type, elem, mass, reaction, branch):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    connection = engines["exfor"].connect()
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
-
-    queries = [
-        Exfor_Indexes.target == target,
-        Exfor_Indexes.process == reaction.upper(),
-        Exfor_Indexes.sf6 == type.upper(),
-        Exfor_Indexes.arbitrary_data == False,
-    ]
-
-    if branch == "PAR":
-        queries.append(Exfor_Indexes.sf5 == branch)
-
-    elif isinstance(branch, int):
-        queries.append(Exfor_Indexes.level_num == branch)
-
-    reac = (
-        session()
-        .query(Exfor_Indexes, Exfor_Bib)
-        .filter(*queries)
-        .join(Exfor_Bib, Exfor_Indexes.entry == Exfor_Bib.entry, isouter=True)
-        .distinct()
-    )
-
-    df = pd.read_sql(
-        sql=reac.statement,
-        con=connection,
-    )
-    # print(df)
-    return df
-
-
-
-def bib_query(entries):
-    queries = [Exfor_Bib.entry.in_(tuple(entries))]
-    indexes = session().query(Exfor_Bib).filter(*queries)
-    df = pd.read_sql(
-        sql=indexes.statement,
-        con=connection,
-    ) 
-    return df
-
-
-
-def index_query_by_bib(entries):
-    queries = [Exfor_Indexes.entry.in_(tuple(entries))]
-    # bib = session().query(Exfor_Indexes).filter().all()
-
-    indexes = session().query(Exfor_Indexes).filter(*queries)
-    df = pd.read_sql(
-        sql=indexes.statement,
-        con=connection,
-    ) 
-
-    return df
-
-
-
-
-
-########  -------------------------------------- ##########
-##         Reaction queries for the dataexplorer
-########  -------------------------------------- ##########
-
-
-def reaction_query(type, elem, mass, reaction, branch=None, rp_elem=None, rp_mass=None):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    # print("reaction_query")
-    reac = None
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
-
-    queries = [Exfor_Indexes.target == target, Exfor_Indexes.arbitrary_data == False]
-
-    if branch:
-        if branch == "PAR":
-            queries.append(Exfor_Indexes.sf5 == branch)
-
-        elif isinstance(branch, int):
-            queries.append(Exfor_Indexes.sf5 == "PAR")
-            queries.append(Exfor_Indexes.level_num == branch)
-
-        elif type == "FY":
-            queries.append(Exfor_Indexes.sf5 == branch.upper())
-
-    else:
-        queries.append(Exfor_Indexes.sf5 == None)
-
-    if type == "Residual":
-        type = "SIG"
-
-        if rp_mass.endswith(("m", "M", "g", "G")):
-            residual = (
-                rp_elem.capitalize()
-                + "-"
-                + str(get_number_from_string(rp_mass))
-                + "-"
-                + get_str_from_string(str(rp_mass)).upper()
-            )
-
-        else:
-            residual = rp_elem.capitalize() + "-" + str(rp_mass)
-
-        queries.append(Exfor_Indexes.projectile == reaction.upper())
-        queries.append(Exfor_Indexes.residual == residual)
-
-    else:
-        queries.append(Exfor_Indexes.process == reaction.replace("total", "tot").upper())
-        queries.append(Exfor_Indexes.sf7 == None)
-        queries.append(Exfor_Indexes.sf8 == None)
-
-
-        if not any(r in reaction for r in ("tot", "f")):
-            queries.append(~Exfor_Indexes.sf4.endswith("-G"))
-            queries.append(~Exfor_Indexes.sf4.endswith("-M"))
-
-    queries.append(Exfor_Indexes.sf6 == type.upper())
-    reac = session().query(Exfor_Indexes).filter(*queries).all()
-
-    entries = {}
-    # sum_points = 0
-    if reac:
-        for ent in reac:
-            entries[ent.entry_id] = {
-                "e_inc_min": ent.e_inc_min,
-                "e_inc_max": ent.e_inc_max,
-                "points": ent.points,
-                "sf5": ent.sf5,
-                "sf8": ent.sf8,
-                "x4_code": ent.x4_code,
-            }
-            # sum_points += ent.points
-
-        # entries["total_points"] = sum_points
-
-    return entries
-
-
-
-
-def get_entry_bib(entries):
-    bib = session().query(Exfor_Bib).filter(Exfor_Bib.entry.in_(tuple(entries))).all()
-
-    legend = {}
-
-    for b in bib:
-        legend[b.entry] = {
-            "author": b.first_author,
-            "year": b.year if b.year else 1900,  ## Comments SO: should be int in SQL
-        }
-
-    return OrderedDict(
-        sorted(legend.items(), key=lambda x: getitem(x[1], "year"), reverse=True),
-    )
-
-
-
-
-def data_query(entids, branch=None):
-    connection = engines["exfor"].connect()
-    queries = [Exfor_Data.entry_id.in_(tuple(entids))]
-
-    if branch:
-        if isinstance(branch, int):
-            queries.append(Exfor_Data.level_num == branch)
-
-    data = session().query(Exfor_Data).filter(*queries)
-
-    df = pd.read_sql(
-        sql=data.statement,
-        con=connection,
-    )
-
-    return df
-
-
-######## -------------------------------------- ########
-#    Queries for FY
-######## -------------------------------------- ########
-
-
-def fy_branch(branch):
-    if branch == "PRE":
-        return ["PRE", "TER", "QTR", "PRV", "TER/CHG"]
-
-    if branch == "IND":
-        return ["IND", "SEC", "MAS", "CHG", "SEC/CHN"]
-
-    if branch == "CUM":
-        return ["CUM", "CHN"]
-
-
-def reaction_query_fy(
-    type, elem, mass, reaction, branch, mesurement_opt_fy, lower, upper 
-):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
-
-
-    reac = (
-        session()
-        .query(Exfor_Indexes)
-        .filter(
-            Exfor_Indexes.target == target,
-            Exfor_Indexes.process == reaction.upper(),
-            Exfor_Indexes.sf5.in_(tuple(fy_branch(branch))),
-            Exfor_Indexes.sf6 == type.upper(),
-            Exfor_Indexes.e_inc_min >= lower,
-            Exfor_Indexes.e_inc_max <= upper,
-            Exfor_Indexes.arbitrary_data == False,
-            (
-                Exfor_Indexes.sf4 == "MASS"
-                if mesurement_opt_fy == "A"
-                else Exfor_Indexes.sf4 == "ELEM"
-                if mesurement_opt_fy == "Z"
-                else Exfor_Indexes.sf4.isnot(None)
-            ),
-        )
-        .all()
-    )
-
-    entries = {}
-
-    for ent in reac:
-        entries[ent.entry_id] = {
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
-            "points": ent.points,
-            "sf8": ent.sf8,
-            "residual": ent.residual,
-            "x4_code": ent.x4_code,
-        }
-
-    return entries
-
-
-def reaction_query_fission(type, elem, mass, reaction, branch, lower, upper ):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    sf4 = None
-    sf5 = None
-    sf6 = None
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
-
-    queries = [
-        Exfor_Indexes.target == target,
-        Exfor_Indexes.process == reaction.upper(),
-        Exfor_Indexes.arbitrary_data == False,
-    ]
-
-    if branch == "nu_n":
-        sf5 = ["PR"]
-        sf6 = ["NU"]
-    elif branch == "nu_g":
-        sf4 = "0-G-0"
-        sf5 = ["PR"]
-        sf6 = ["FY"]
-    elif branch == "dn":
-        sf5 = ["DL"]
-        sf6 = ["NU"]
-    elif branch == "pfns":
-        sf5 = ["PR"]
-        sf6 = ["NU/DE"]
-    elif branch == "pfgs":
-        sf4 = "0-G-0"
-        sf5 = ["PR"]
-        sf6 = ["FY/DE"]
-    else:
-        ## to avoid large query
-        return None, None
-
-    if sf4:
-        queries.append(Exfor_Indexes.sf4 == sf4)
-
-    if sf5:
-        queries.append(Exfor_Indexes.sf5.in_(tuple(sf5)))
-
-    if sf6:
-        queries.append(Exfor_Indexes.sf6.in_(tuple(sf6)))
-
-    if lower and upper :
-        # lower, upper = energy_range_conversion(energy_range)
-        queries.append(Exfor_Indexes.e_inc_min >= lower)
-        queries.append(Exfor_Indexes.e_inc_max <= upper)
-
-    reac = session().query(Exfor_Indexes).filter(*queries).all()
-
-    entids = {}
-    entries = []
-
-    for ent in reac:
-        entids[ent.entry_id] = {
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
-            "points": ent.points,
-            "sf5": ent.sf5,
-            "sf8": ent.sf8,
-            "x4_code": ent.x4_code,
-        }
-        entries += [ent.entry]
-    # print(entids)
-
-    return entids, entries
-
-
-### facility query
-
-
-def facility_query(facility_code, facility_type):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    connection = engines["exfor"].connect()
-
-    queries = [
-        Exfor_Indexes.main_facility_institute == facility_code,
-        Exfor_Indexes.main_facility_type == facility_type.upper(),
-    ]
-
-    reac = (
-        session()
-        .query(Exfor_Indexes, Exfor_Bib)
-        .filter(*queries)
-        .join(Exfor_Bib, Exfor_Indexes.entry == Exfor_Bib.entry, isouter=True)
-        .distinct()
-    )
-
-    df = pd.read_sql(
-        sql=reac.statement,
-        con=connection,
-    )
-    # print(df)
-    return df
