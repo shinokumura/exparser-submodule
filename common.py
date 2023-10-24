@@ -16,7 +16,8 @@ import os
 import re
 import json
 
-from config import MT_PATH_JSON, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
+from config import DATA_DIR, MT_PATH_JSON, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
+from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 
 resid_mt_range = {"N": list(range(50,90)) , 
@@ -99,6 +100,21 @@ def open_json(file):
         return None
 
 
+
+LIB_LIST_MAX = [
+    "tendl.2021",
+    "endfb8.0",
+    "jeff3.3",
+    "jendl5.0",
+    "iaea.2019",
+    "cendl3.2",
+    "irdff2.0",
+    "iaea.pd",
+]
+LIB_LIST_MAX.sort(reverse=True)
+
+
+
 def generate_exfortables_file_path(input_store):
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
@@ -136,7 +152,7 @@ def generate_exfortables_file_path(input_store):
         if os.path.exists(dir):
             exfiles = os.listdir(dir)
 
-    return list_link_of_files(dir, exfiles)
+    return dir, exfiles
 
 
 
@@ -170,26 +186,25 @@ def generate_endftables_file_path(input_store):
             if os.path.exists(dir):
                 libfiles += [ f for f in os.listdir(dir) if f"MT{mt.zfill(3)}.{lib}" in f ]
 
-    return list_link_of_files(dir, libfiles)
+    return dir, libfiles
 
 
 
-def list_link_of_files(dir, files):
-
+def generate_link_of_files(dir, files):
+    ## similar to list_link_of_files in dataexplorer/common.py
     flinks = []
     for f in sorted(files):
         
         filename = os.path.basename(f)
-        # dirname = os.path.dirname(f)
-        # linkdir = dirname.replace(DATA_DIR, "")
+        dirname = os.path.dirname(f)
+        linkdir = dirname.replace(DATA_DIR, "")
 
         fullpath = os.path.join(dir, filename)
-        a = html.A(
-            filename, href=fullpath, target="_blank"
-        )
+        # a = html.A(
+        #     filename, href=fullpath, target="_blank"
+        # )
 
-        flinks.append(a)
-        flinks.append(html.Br())
-
+        flinks.append(linkdir)
+        # flinks.append(html.Br())
+    print(flinks)
     return flinks
-
