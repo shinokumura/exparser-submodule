@@ -3,13 +3,21 @@ from collections import OrderedDict
 from operator import getitem
 from sqlalchemy import func
 
-from submodules.utilities.elem import elemtoz_nz
-from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
+
 from config import session, engines
-from submodules.utilities.util import get_number_from_string, get_str_from_string
+from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
+
+from submodules.utilities.elem import elemtoz_nz
+from submodules.utilities.util import (
+    get_number_from_string,
+    get_str_from_string,
+    x4style_nuclide_expression,
+)
+from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 
 
 connection = engines["exfor"].connect()
+
 
 def get_exfor_bib_table():
     df = pd.read_sql_table("exfor_bib", connection)
@@ -26,14 +34,12 @@ def get_exfor_indexes_table():
     return df
 
 
-
-
 ########  -------------------------------------------- ##########
 ##      EXFOR entry queries for the dataexplorer/api/exfor     ##
 ########  -------------------------------------------- ##########
 def entries_query(**kwargs):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    connection = engines["exfor"].connect()
+    # connection = engines["exfor"].connect()
     queries = []
     elem = kwargs.get("target_elem")
     mass = kwargs.get("target_mass")
@@ -52,7 +58,7 @@ def entries_query(**kwargs):
     sf8 = kwargs.get("sf8")  # SF6
 
     if elem and mass:
-        target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+        target = x4style_nuclide_expression(elem, mass)
         queries.append(Exfor_Reactions.target == target)
     if reaction:
         queries.append(Exfor_Reactions.process == reaction.upper())
@@ -66,7 +72,7 @@ def entries_query(**kwargs):
         queries.append(Exfor_Reactions.sf7 == sf7)
     if sf8:
         queries.append(Exfor_Reactions.sf8 == sf8)
-    if  institute:
+    if institute:
         queries.append(Exfor_Bib.main_facility_institute == institute)
     if facility:
         queries.append(Exfor_Bib.main_facility_type == facility)
@@ -87,10 +93,9 @@ def entries_query(**kwargs):
     return df
 
 
-
 def facility_query(facility_code, facility_type):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    connection = engines["exfor"].connect()
+    # connection = engines["exfor"].connect()
 
     queries = [
         Exfor_Indexes.main_facility_institute == facility_code,
@@ -113,36 +118,59 @@ def facility_query(facility_code, facility_type):
     return df
 
 
-
 ########  -------------------------------------- ##########
 ##         Reaction queries for the dataexplorer
 ########  -------------------------------------- ##########
-def index_query(type, elem, mass, reaction, branch=None, rp_elem=None, rp_mass=None) -> dict:
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    # print("index_query")
+def index_query(input_store) -> dict:
+    # print(input_store)
+    ## {'type': 'XS', 'target_elem': 'Al', 'target_mass': '27', 'reaction': 'n,p', 'rp_elem': None, 'rp_mass': None, 'level_num': None, 'branch': None, 'mt': '103', 'excl_junk_switch': True}
+    type = input_store.get("type").upper()
+    elem = input_store.get("target_elem")
+    mass = input_store.get("target_mass")
+    reaction = input_store.get("reaction")
+    branch = input_store.get("branch")
+    level_num = input_store.get("level_num")
+    rp_elem = input_store.get("rp_elem")
+    rp_mass = input_store.get("rp_mass")
+    excl_junk_switch = input_store.get("excl_junk_switch")
     reac = None
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
 
-    queries = [Exfor_Indexes.target == target, Exfor_Indexes.arbitrary_data == False]
+    # Convert elem and mass to the EXFOR nuclide style
+    target = x4style_nuclide_expression(elem, mass)
+    queries = [Exfor_Indexes.target == target, 
+               Exfor_Indexes.arbitrary_data == False]
 
+
+    #--------------- only for XS
+    if type == "XS":
+        type = "SIG"
+    #---------------
+
+
+    #--------------- Branch
     if branch:
-        if branch == "PAR":
-            queries.append(Exfor_Indexes.sf5 == branch)
-
-        elif isinstance(branch, int):
-            queries.append(Exfor_Indexes.sf5 == "PAR")
-            queries.append(Exfor_Indexes.level_num == branch)
-
-        elif type == "FY":
+        if type != "FY":
             queries.append(Exfor_Indexes.sf5 == branch.upper())
+        else:
+            queries.append(Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
+
+    elif isinstance(level_num, int):
+        reaction = convert_partial_reactionstr_to_inl(reaction)
+
+        queries.append(Exfor_Indexes.sf5 == "PAR")
+        queries.append(Exfor_Indexes.level_num == level_num)
 
     else:
         queries.append(Exfor_Indexes.sf5 == None)
+    #---------------
 
-    if type == "Residual":
+
+    #---------------
+    if type == "RP":
         type = "SIG"
-
-        if rp_mass.endswith(("m", "M", "g", "G")):
+        
+        if rp_mass.endswith(("m", "M", "g", "G", "L", "M1", "M2", "m1", "m2")):
+            
             residual = (
                 rp_elem.capitalize()
                 + "-"
@@ -154,40 +182,69 @@ def index_query(type, elem, mass, reaction, branch=None, rp_elem=None, rp_mass=N
         else:
             residual = rp_elem.capitalize() + "-" + str(rp_mass)
 
-        queries.append(Exfor_Indexes.projectile == reaction.upper())
+        queries.append(Exfor_Indexes.projectile == reaction.split(",")[0].upper())
         queries.append(Exfor_Indexes.residual == residual)
 
     else:
-        queries.append(Exfor_Indexes.process == reaction.replace("total", "tot").upper())
-        queries.append(Exfor_Indexes.sf7 == None)
-        queries.append(Exfor_Indexes.sf8 == None)
-
+        queries.append(
+            Exfor_Indexes.process == reaction.replace("total", "tot").upper()
+        )
 
         if not any(r in reaction for r in ("tot", "f")):
             queries.append(~Exfor_Indexes.sf4.endswith("-G"))
             queries.append(~Exfor_Indexes.sf4.endswith("-M"))
+            queries.append(~Exfor_Indexes.sf4.endswith("-L"))
+            queries.append(~Exfor_Indexes.sf4.endswith("-M1"))
+            queries.append(~Exfor_Indexes.sf4.endswith("-M2"))
+    #---------------
+
+    if type == "FY":
+        mesurement_opt_fy = input_store.get("mesurement_opt_fy")
+        reac_product_fy = input_store.get("reac_product_fy")
+
+        # if mesurement_opt_fy:
+        queries.append(
+            Exfor_Indexes.sf4 == "MASS"
+                if mesurement_opt_fy == "A"
+                else Exfor_Indexes.sf4 == "ELEM"
+                if mesurement_opt_fy == "Z"
+                else Exfor_Indexes.sf4.isnot(None)
+        )
+
+        if reac_product_fy:
+            # print(reac_product_fy)
+            queries.append( Exfor_Indexes.residual == reac_product_fy )
+
+
+
+    reac = session().query(Exfor_Indexes).filter(*queries).all()
+
+    if excl_junk_switch:
+        queries.append(Exfor_Indexes.sf7 == None)
+        queries.append(Exfor_Indexes.sf8 == None)
+
 
     queries.append(Exfor_Indexes.sf6 == type.upper())
+
+    ## execute query
     reac = session().query(Exfor_Indexes).filter(*queries).all()
 
     entries = {}
-    # sum_points = 0
+
     if reac:
         for ent in reac:
             entries[ent.entry_id] = {
+                # "residual": ent.residual,
+                "level_num": ent.level_num,
                 "e_inc_min": ent.e_inc_min,
                 "e_inc_max": ent.e_inc_max,
                 "points": ent.points,
-                "sf5": ent.sf5,
-                "sf8": ent.sf8,
                 "x4_code": ent.x4_code,
                 "mt": ent.mt,
                 "mf": ent.mf,
             }
-            # sum_points += ent.points
 
-        # entries["total_points"] = sum_points
-
+    # print(entries)
     return entries
 
 
@@ -199,7 +256,7 @@ def get_entry_bib(entries):
     for b in bib:
         legend[b.entry] = {
             "author": b.first_author,
-            "year": b.year if b.year else 1900,  ## Comments SO: should be int in SQL
+            "year": b.year if b.year else 1900,  ## Should be int in SQL
         }
 
     return OrderedDict(
@@ -207,7 +264,20 @@ def get_entry_bib(entries):
     )
 
 
-def index_query_by_bib(entries):
+def entry_query_by_id(entries):
+    queries = [Exfor_Bib.entry.in_(tuple(entries))]
+    # bib = session().query(Exfor_Indexes).filter().all()
+
+    indexes = session().query(Exfor_Bib).filter(*queries)
+    df = pd.read_sql(
+        sql=indexes.statement,
+        con=connection,
+    )
+
+    return df
+
+
+def index_query_by_id(entries):
     queries = [Exfor_Indexes.entry.in_(tuple(entries))]
     # bib = session().query(Exfor_Indexes).filter().all()
 
@@ -215,20 +285,96 @@ def index_query_by_bib(entries):
     df = pd.read_sql(
         sql=indexes.statement,
         con=connection,
-    ) 
+    )
 
     return df
 
 
-def data_query(entids, branch=None):
-    connection = engines["exfor"].connect()
+def data_query(input_store, entids):
+    # connection = engines["exfor"].connect()
+
+    type = input_store.get("type").upper()
+    level_num = input_store.get("level_num")
+
     queries = [Exfor_Data.entry_id.in_(tuple(entids))]
 
-    if branch:
-        if isinstance(branch, int):
-            queries.append(Exfor_Data.level_num == branch)
+    if level_num:
+        queries.append(Exfor_Data.level_num == level_num)
 
-    data = session().query(Exfor_Data).filter(*queries)
+    # data = session().query(Exfor_Data).filter(*queries)
+    if type.upper() == "SIG":
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
+                Exfor_Data.level_num,
+                Exfor_Data.residual,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    if type.upper() == "Residual":
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
+                Exfor_Data.residual,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    elif type.upper() == "FY":
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
+                Exfor_Data.charge,
+                Exfor_Data.mass,
+                Exfor_Data.isomer,
+                Exfor_Data.residual,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    elif type.upper() == "DA":
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
+                Exfor_Data.angle,
+                Exfor_Data.dangle,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    elif type.upper() == "DE":
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
+                Exfor_Data.e_out,
+                Exfor_Data.de_out,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    else:
+        data = session().query(Exfor_Data).filter(*queries)
 
     df = pd.read_sql(
         sql=data.statement,
@@ -245,74 +391,74 @@ def fy_branch(branch):
     if branch == "PRE":
         return ["PRE", "TER", "QTR", "PRV", "TER/CHG"]
 
-    if branch == "IND":
+    elif branch == "IND":
         return ["IND", "SEC", "MAS", "CHG", "SEC/CHN"]
 
-    if branch == "CUM":
+    elif branch == "CUM":
         return ["CUM", "CHN"]
+    
+    else:
+        return [branch]
 
 
-def index_query_fy(
-    type, elem, mass, reaction, branch, mesurement_opt_fy=None, lower=None, upper=None
-):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
+# def index_query_fy(type, elem, mass, reaction, branch, mesurement_opt_fy):
+#     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
 
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+#     target = x4style_nuclide_expression(elem, mass)
 
-    queries = [
-            Exfor_Indexes.target == target,
-            Exfor_Indexes.process == reaction.upper(),
-            Exfor_Indexes.sf6 == "FY",
-            Exfor_Indexes.arbitrary_data == False
-    ]
+#     queries = [
+#         Exfor_Indexes.target == target,
+#         Exfor_Indexes.process == reaction.upper(),
+#         Exfor_Indexes.sf6 == "FY",
+#         Exfor_Indexes.arbitrary_data == False,
+#     ]
 
-    if branch:
-        queries.append(Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
-    if lower:
-        queries.append(Exfor_Indexes.e_inc_min >= lower)
-    if upper:
-        queries.append(Exfor_Indexes.e_inc_max <= upper)
-    if mesurement_opt_fy:
-        queries.append(
-                Exfor_Indexes.sf4 == "MASS"
-                if mesurement_opt_fy == "A"
-                else Exfor_Indexes.sf4 == "ELEM"
-                if mesurement_opt_fy == "Z"
-                else Exfor_Indexes.sf4.isnot(None)
-            )
+#     if branch:
+#         queries.append(Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
+#     # if lower:
+#     #     queries.append(Exfor_Indexes.e_inc_min >= lower)
+#     # if upper:
+#     #     queries.append(Exfor_Indexes.e_inc_max <= upper)
+#     if mesurement_opt_fy:
+#         queries.append(
+#             Exfor_Indexes.sf4 == "MASS"
+#             if mesurement_opt_fy == "A"
+#             else Exfor_Indexes.sf4 == "ELEM"
+#             if mesurement_opt_fy == "Z"
+#             else Exfor_Indexes.sf4.isnot(None)
+#         )
 
-    reac = (
-        session()
-        .query(Exfor_Indexes)
-        .filter(*queries)
-        .all()
-    )
+#     reac = session().query(Exfor_Indexes).filter(*queries).all()
 
-    entries = {}
-    current = None
-    residuals = []
-    for ent in reac:
-        if current != ent.entry_id:
-            residuals = []
-        residuals.append(ent.residual)
-        entries[ent.entry_id] = {
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
-            "points": ent.points,
-            "sf8": ent.sf8,
-            "residuals": residuals,
-            "x4_code": ent.x4_code,
-        }
-        current = ent.entry_id
-    return entries
+#     entries = {}
+#     current = None
+#     residuals = []
+#     for ent in reac:
+#         if current != ent.entry_id:
+#             residuals = []
+#             points = 0
+#         residuals.append(ent.residual)
+#         points += ent.points
+#         entries[ent.entry_id] = {
+#             "e_inc_min": ent.e_inc_min,
+#             "e_inc_max": ent.e_inc_max,
+#             "points": points,
+#             "sf8": ent.sf8,
+#             "residuals": residuals,
+#             "x4_code": ent.x4_code,
+#             "mt": ent.mt,
+#             "mf": ent.mf,
+#         }
+#         current = ent.entry_id
+#     return entries
 
 
-def index_query_fission(type, elem, mass, reaction, branch, lower, upper ):
+def index_query_fission(type, elem, mass, reaction, branch, lower, upper):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
     sf4 = None
     sf5 = None
     sf6 = None
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+    target = x4style_nuclide_expression(elem, mass)
 
     queries = [
         Exfor_Indexes.target == target,
@@ -350,7 +496,7 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper ):
     if sf6:
         queries.append(Exfor_Indexes.sf6.in_(tuple(sf6)))
 
-    if lower and upper :
+    if lower and upper:
         # lower, upper = energy_range_conversion(energy_range)
         queries.append(Exfor_Indexes.e_inc_min >= lower)
         queries.append(Exfor_Indexes.e_inc_max <= upper)
@@ -377,8 +523,8 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper ):
 
 def index_query_simple(type, elem, mass, reaction, branch):
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
-    connection = engines["exfor"].connect()
-    target = elemtoz_nz(elem) + "-" + elem.upper() + "-" + mass
+    # connection = engines["exfor"].connect()
+    target = x4style_nuclide_expression(elem, mass)
 
     queries = [
         Exfor_Indexes.target == target,
@@ -409,14 +555,11 @@ def index_query_simple(type, elem, mass, reaction, branch):
     return df
 
 
-
-
-
 ########  -------------------------------------- ##########
 ##         Join table for AGGrid
 ########  -------------------------------------- ##########
 def join_reaction_bib():
-    connection = engines["exfor"].connect()
+    # connection = engines["exfor"].connect()
     all = (
         session()
         .query(
@@ -440,7 +583,11 @@ def join_reaction_bib():
             # Exfor_Indexes.e_inc_min
         )
         .join(Exfor_Bib, Exfor_Bib.entry == Exfor_Reactions.entry)
-        .join(Exfor_Indexes, Exfor_Indexes.entry_id == Exfor_Reactions.entry_id, isouter = True)
+        .join(
+            Exfor_Indexes,
+            Exfor_Indexes.entry_id == Exfor_Reactions.entry_id,
+            isouter=True,
+        )
         .group_by(Exfor_Reactions.entry_id)
         .order_by(Exfor_Bib.year.desc())
     )
@@ -453,9 +600,8 @@ def join_reaction_bib():
     return df
 
 
-
 def join_index_bib():
-    connection = engines["exfor"].connect()
+    # connection = engines["exfor"].connect()
     all = (
         session()
         .query(
@@ -478,11 +624,10 @@ def join_index_bib():
         .join(Exfor_Bib, Exfor_Bib.entry == Exfor_Indexes.entry)
         .order_by(Exfor_Bib.year.desc())
     )
-    
+
     df = pd.read_sql(
         sql=all.statement,
         con=connection,
     )
 
     return df
-

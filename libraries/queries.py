@@ -4,46 +4,58 @@ from config import session_lib, engines
 from endftables_sql.models import (
     Endf_Reactions,
     Endf_XS_Data,
+    Endf_ANGLE_Data,
     Endf_Residual_Data,
     Endf_N_Residual_Data,
     Endf_FY_Data,
 )
-from submodules.utilities.util import get_number_from_string, get_str_from_string
+from submodules.utilities.util import libstyle_nuclide_expression
 
-
+connection = engines["endftables"].connect()
 
 ######## -------------------------------------- ########
 #    Queries for endftables
 ######## -------------------------------------- ########
-def lib_query(type, elem, mass, reaction, mt, rp_elem=None, rp_mass=None):
-    target = elem + mass.zfill(3)
+def lib_query(input_store):
+    # print(input_store)
+    type = input_store.get("type").upper()
+    elem = input_store.get("target_elem")
+    mass = input_store.get("target_mass")
+    reaction = input_store.get("reaction")
+    
+    target = libstyle_nuclide_expression(elem, mass)
     queries = [
         Endf_Reactions.target == target,
         Endf_Reactions.projectile == reaction.split(",")[0].lower(),
     ]
 
-    if type == "XS":
-        # type = "xs"
-        queries.append(Endf_Reactions.process == reaction.split(",")[1].replace("total", "tot").upper())
+    if type == "XS" or type == "DA" or type == "FY":
+        mt = input_store.get("mt")
         queries.append(
-            Endf_Reactions.mt == mt
+            Endf_Reactions.mt == mt.zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
 
-    elif type == "Residual":
-        if rp_mass.endswith(("m", "M", "g", "G")):
-            residual = (
-                rp_elem.capitalize()
-                + str(get_number_from_string(rp_mass))
-                + get_str_from_string(str(rp_mass)).lower()
-            )
 
-        else:
-            residual = rp_elem.capitalize() + str(rp_mass)
-
+    elif type == "RP":
+        type = "residual"
+        rp_elem = input_store.get("rp_elem")
+        rp_mass = input_store.get("rp_mass")
+        residual = libstyle_nuclide_expression(rp_elem, rp_mass)
         queries.append(Endf_Reactions.residual == residual)
 
-    elif type == "FY":
-        queries.append(Endf_Reactions.mt == mt)
+
+    # elif type == "FY":
+    #     queries.append(Endf_Reactions.mt == mt)
+
+
+    elif type == "DA":
+        type == "angle"
+        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
+
+
+    elif type == "DE":
+        type == "energy"
+
 
     queries.append(Endf_Reactions.type == type.lower())
     ## Establish session to the endftable database
@@ -54,11 +66,15 @@ def lib_query(type, elem, mass, reaction, mt, rp_elem=None, rp_mass=None):
         # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
         libs[r.reaction_id] = r.evaluation
 
+    # print(libs)
     return libs
 
 
+
+
+
 def lib_xs_data_query(ids):
-    connection = engines["endftables"].connect()
+    # connection = engines["endftables"].connect()
     data = (
         session_lib()
         .query(Endf_XS_Data)
@@ -71,6 +87,23 @@ def lib_xs_data_query(ids):
     )
 
     return df
+
+
+def lib_da_data_query(ids):
+    # connection = engines["endftables"].connect()
+    data = (
+        session_lib()
+        .query(Endf_ANGLE_Data)
+        .filter(Endf_ANGLE_Data.reaction_id.in_(tuple(ids)))
+    )
+
+    df = pd.read_sql(
+        sql=data.statement,
+        con=connection,
+    )
+
+    return df
+
 
 
 def lib_residual_data_query(inc_pt, ids):
@@ -97,15 +130,13 @@ def lib_residual_data_query(inc_pt, ids):
     return df
 
 
-def lib_data_query_fy(ids, en_lower, en_upper):
-    connection = engines["endftables"].connect()
+def lib_data_query_fy(ids):
+    # connection = engines["endftables"].connect()
     data = (
         session_lib()
         .query(Endf_FY_Data)
         .filter(
             Endf_FY_Data.reaction_id.in_(tuple(ids)),
-            # Endf_FY_Data.en_inc >= en_lower,
-            # Endf_FY_Data.en_inc <= en_upper,
         )
     )
 
