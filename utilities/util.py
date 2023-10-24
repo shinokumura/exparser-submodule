@@ -15,6 +15,7 @@ import os
 import shutil
 import time
 import json
+from submodules.utilities.elem import elemtoz_nz
 
 
 def slices(s, *args):
@@ -24,16 +25,12 @@ def slices(s, *args):
         position += length
 
 
+def get_number_from_string(x):
+    return re.sub(r"\D+", "", x)
 
 
-def get_number_from_string(str):
-    return re.sub(r"\D+", "", str)
-
-
-
-def get_str_from_string(str):
-    return re.sub(r"\d+", "", str)
-
+def get_str_from_string(x):
+    return re.sub(r"\d+", "", str(x))
 
 
 def flatten(xs):
@@ -78,13 +75,11 @@ def dict_merge(dicts_list):
     return d
 
 
-
 def combine_dict(d1, d2):
     return {
         k: list(d[k] for d in (d1, d2) if k in d)
         for k in set(d1.keys()) | set(d2.keys())
     }
-
 
 
 def get_key_from_value(d, val):
@@ -102,9 +97,7 @@ def del_file(fname):
     os.remove(fname)
 
 
-
 def del_outputs(name, outpath):
-
     path = os.path.join(outpath, name)
 
     if os.path.exists(path):
@@ -135,3 +128,18 @@ def print_time(start_time=None):
         return time.time()
 
 
+def x4style_nuclide_expression(elem, mass):
+    print(get_str_from_string(mass))
+
+    if get_str_from_string(mass) != "":
+        return f"{elemtoz_nz(elem)}-{elem.upper()}-{get_number_from_string(mass)}-{get_str_from_string(mass).replace('-', '').upper()}"
+
+    return f"{elemtoz_nz(elem)}-{elem.upper()}-{str(int(mass))}"
+
+
+def libstyle_nuclide_expression(elem, mass):
+    print(get_str_from_string(mass))
+    if get_str_from_string(mass) != "":
+        return f"{elem.capitalize()}{get_number_from_string(mass).zfill(3)}{get_str_from_string(mass).replace('-', '').lower()}"
+
+    return f"{elem.capitalize()}{get_number_from_string(mass).zfill(3)}"
