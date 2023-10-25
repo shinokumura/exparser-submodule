@@ -70,6 +70,17 @@ def lib_query(input_store):
     return libs
 
 
+def lib_data_query(input_store, ids):
+    type = input_store["type"].upper()
+
+    if type == "XS":
+        lib_xs_data_query(ids)
+    elif type == "FY":
+        lib_fy_data_query(ids)
+    elif type == "DA":
+        lib_da_data_query(ids)
+    elif type == "RP":
+        lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
 
 
 
@@ -130,7 +141,7 @@ def lib_residual_data_query(inc_pt, ids):
     return df
 
 
-def lib_data_query_fy(ids):
+def lib_fy_data_query(ids):
     # connection = engines["endftables"].connect()
     data = (
         session_lib()
