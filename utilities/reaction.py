@@ -14,3 +14,10 @@ def convert_partial_reactionstr_to_inl(reaction):
         return get_str_from_string(reaction).upper()
 
 
+def convert_reaction_to_exfor_style(reaction):
+    if reaction.split(',')[0].upper() == "H":
+        ## incident "h" --> "HE3"
+        reaction = f"HE3,{reaction.split(',')[1].upper()}"
+    
+    return reaction
+

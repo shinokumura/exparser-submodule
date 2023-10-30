@@ -69,7 +69,7 @@ def reaction_list(projectile):
     #   "reaction": "(n,elas.)",
     #   "sf5-8": null
     #  },
-    
+
     all = { "N" if projectile.upper()!="N" and k=="INL" else k : i for k, i in all.items()   }
     partial = {}
 
@@ -83,6 +83,23 @@ def reaction_list(projectile):
 
     return dict(**all, **partial)
 
+
+def exfor_reaction_list(projectile):
+    if not projectile:
+        return read_mt_json()
+    
+    assert len(projectile) == 1
+
+    all = read_mt_json()
+    # "EL": {
+    #   "mt": "2",
+    #   "reaction": "(n,elas.)",
+    #   "sf5-8": null
+    #  },
+
+    all = { "N" if projectile.upper()!="N" and k=="INL" else k : i for k, i in all.items()   }
+
+    return all
 
 
 def get_mt(reac):
