@@ -33,6 +33,14 @@ def get_str_from_string(x):
     return re.sub(r"\d+", "", str(x))
 
 
+def split_by_number(x) -> list:
+    ## retrun list for e.g.
+    # ['Br', '077', '']
+    # ['Br', '077', 'g']
+    # ['Br', '077', 'm']
+    return re.split(r'(\d+)', x)
+
+
 def flatten(xs):
     from collections.abc import Iterable
 

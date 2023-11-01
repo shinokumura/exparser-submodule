@@ -44,10 +44,6 @@ def lib_query(input_store):
         queries.append(Endf_Reactions.residual == residual)
 
 
-    # elif type == "FY":
-    #     queries.append(Endf_Reactions.mt == mt)
-
-
     elif type == "DA":
         type == "angle"
         queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
@@ -66,8 +62,27 @@ def lib_query(input_store):
         # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
         libs[r.reaction_id] = r.evaluation
 
-    # print(libs)
+    print(libs)
     return libs
+
+
+def lib_residual_nuclide_list(elem, mass, inc_pt):
+    # print(input_store)
+    target = libstyle_nuclide_expression(elem, mass)
+
+    data = (
+        session_lib()
+        .query(Endf_Reactions.residual)
+        .filter(Endf_Reactions.type == "residual", 
+                Endf_Reactions.projectile == inc_pt.lower(),
+                Endf_Reactions.target == target
+                )
+            ).all()
+    
+    if data:
+        return sorted( [d[0] for d in data] )
+
+
 
 
 def lib_data_query(input_store, ids):
@@ -118,9 +133,9 @@ def lib_da_data_query(ids):
 
 
 def lib_residual_data_query(inc_pt, ids):
-    connection = engines["endftables"].connect()
+    # connection = engines["endftables"].connect()
 
-    if inc_pt == "n":
+    if inc_pt.lower() == "n":
         data = (
             session_lib()
             .query(Endf_N_Residual_Data)

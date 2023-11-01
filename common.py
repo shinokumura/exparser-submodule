@@ -136,6 +136,7 @@ def generate_exfortables_file_path(input_store):
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
+    branch = input_store.get("branch")
     
     reaction = input_store.get("reaction")
     level_num = input_store.get("level_num")
@@ -143,6 +144,7 @@ def generate_exfortables_file_path(input_store):
     target = f"{elem.capitalize()}-{str(int(mass))}"
     exfiles = []
     
+
     if level_num:
         reaction = convert_partial_reactionstr_to_inl(reaction)
         dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
@@ -151,16 +153,27 @@ def generate_exfortables_file_path(input_store):
                         reaction.replace(",", "-").lower() + "-L"+str(level_num),
                         type.lower() )
 
+    elif type == "FY":
+        fy_type = input_store.get("fy_type")
+        dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
+                        reaction.split(",")[0].lower(), 
+                        target,
+                        reaction.replace(",", "-").lower(), 
+                        "fission/yield",
+                        fy_type.lower())
+
     else:
         dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
                         reaction.split(",")[0].lower(), 
                         target, 
                         reaction.replace(",", "-").lower(), 
                         type.lower() if type != "RP" else "xs")
+
     if type == "RP":
+        ## Format is "Ag-109-M"
         rp_elem = input_store.get("rp_elem")
         rp_mass = input_store.get("rp_mass")
-        residual = f"{rp_elem.capitalize()}-{str(int(rp_mass))}"
+        residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
 
         if os.path.exists(dir):
             exfiles = [ f for f in os.listdir(dir)  if residual in f ]
@@ -184,14 +197,24 @@ def generate_endftables_file_path(input_store):
 
     libfiles = []
     for lib in LIB_LIST_MAX:
-        dir = os.path.join( ENDFTABLES_PATH, 
+        if type == "FY":
+            dir = os.path.join( ENDFTABLES_PATH, 
+                        "FY",
+                        reaction.split(",")[0].lower(), 
+                        target,
+                        lib,
+                        "tables/FY"
+                        )
+        else:
+            dir = os.path.join( ENDFTABLES_PATH, 
                         reaction.split(",")[0].lower(), 
                         target,
                         lib,
                         "tables",
                         type.lower() if type != "RP" else "residual"
                         )
-        
+
+
         if type == "RP":
             rp_elem = input_store.get("rp_elem")
             rp_mass = input_store.get("rp_mass")
@@ -201,7 +224,7 @@ def generate_endftables_file_path(input_store):
 
         else:
             if os.path.exists(dir):
-                libfiles += [ f for f in os.listdir(dir) if f"MT{mt.zfill(3)}.{lib}" in f ]
+                libfiles += [ f for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f ]
 
     return dir, libfiles
 

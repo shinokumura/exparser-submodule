@@ -383,6 +383,9 @@ def data_query(input_store, entids):
 
     type = input_store.get("type").upper()
     level_num = input_store.get("level_num")
+    print(type)
+    if type.upper() == "XS":
+        type = "SIG"
 
     queries = [Exfor_Data.entry_id.in_(tuple(entids))]
 
@@ -404,7 +407,7 @@ def data_query(input_store, entids):
             )
             .filter(*queries)
         )
-    if type.upper() == "Residual":
+    elif type.upper() == "RP":
         data = (
             session()
             .query(
