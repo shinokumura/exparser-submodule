@@ -13,7 +13,6 @@ from submodules.utilities.util import (
     get_str_from_string,
     x4style_nuclide_expression,
 )
-from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 from submodules.utilities.reaction import convert_reaction_to_exfor_style, convert_partial_reactionstr_to_inl
 
 connection = engines["exfor"].connect()

@@ -60,9 +60,12 @@ def lib_query(input_store):
     libs = {}
     for r in reac:
         # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
-        libs[r.reaction_id] = r.evaluation
+        libs[r.reaction_id] = {
+            "lib_name": r.evaluation,
+            "mf": r.mf,
+            "mt": r.mt,
+        }
 
-    print(libs)
     return libs
 
 
@@ -87,16 +90,17 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
 
 def lib_data_query(input_store, ids):
     type = input_store["type"].upper()
-
+    df = pd.DataFrame()
     if type == "XS":
-        lib_xs_data_query(ids)
+        df = lib_xs_data_query(ids)
     elif type == "FY":
-        lib_fy_data_query(ids)
+        df = lib_fy_data_query(ids)
     elif type == "DA":
-        lib_da_data_query(ids)
+        df = lib_da_data_query(ids)
     elif type == "RP":
-        lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
+        df = lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
 
+    return df
 
 
 def lib_xs_data_query(ids):

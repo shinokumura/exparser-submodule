@@ -13,100 +13,11 @@
 
 
 import os
-import re
 import json
 
-from config import DATA_DIR, MT_PATH_JSON, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
+from config import DATA_DIR, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
 from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
-
-resid_mt_range = {"N": list(range(50,90)) , 
-            "P": list(range(600,649)), 
-            "D": list(range(650,699)), 
-            "T": list(range(700,749)), 
-            "H": list(range(750,799)), 
-            "A": list(range(800,849)), 
-            "G": [102]
-            } # not sure about photon induced case
-
-
-
-def read_mt_json():
-    if os.path.exists(MT_PATH_JSON):
-        with open(MT_PATH_JSON) as map_file:
-            return json.load(map_file)
-
-MT_BRANCH_LIST_FY = {
-            "Primary":     {"branch": "PRE", "mt": "460"},
-            "Independent": {"branch": "IND", "mt": "454"},
-            "Cumulative":  {"branch": "CUM", "mt": "459"},
-              }
-
-def fy_branch(branch):
-    if branch == "PRE":
-        return ["PRE", "TER", "QTR", "PRV", "TER/CHG"]
-
-    elif branch == "IND":
-        return ["IND", "SEC", "MAS", "CHG", "SEC/CHN"]
-
-    elif branch == "CUM":
-        return ["CUM", "CHN"]
-    
-    else:
-        return [branch]
-
-
-
-def reaction_list(projectile):
-    if not projectile:
-        return read_mt_json()
-    
-    assert len(projectile) == 1
-
-    all = read_mt_json()
-    # "EL": {
-    #   "mt": "2",
-    #   "reaction": "(n,elas.)",
-    #   "sf5-8": null
-    #  },
-
-    all = { "N" if projectile.upper()!="N" and k=="INL" else k : i for k, i in all.items()   }
-    partial = {}
-
-    for p in resid_mt_range.keys():
-        for n in range(len(resid_mt_range[p.upper()])):
-            partial[f"{p.upper()}{str(n)}"] = {
-                                        "mt": str(resid_mt_range[p.upper()][n]),
-                                        "reaction": f"({projectile.lower()},{p.lower()}{str(n)})", 
-                                        "sf5-8": "PAR,SIG,,"
-                                        }
-
-    return dict(**all, **partial)
-
-
-def exfor_reaction_list(projectile):
-    if not projectile:
-        return read_mt_json()
-    
-    assert len(projectile) == 1
-
-    all = read_mt_json()
-    # "EL": {
-    #   "mt": "2",
-    #   "reaction": "(n,elas.)",
-    #   "sf5-8": null
-    #  },
-
-    all = { "N" if projectile.upper()!="N" and k=="INL" else k : i for k, i in all.items()   }
-
-    return all
-
-
-def get_mt(reac):
-    reactions = reaction_list(reac.split(",")[0].upper())
-    return reactions[reac.split(",")[1].upper()]["mt"]
-
-
 
 
 def open_json(file):
@@ -115,7 +26,6 @@ def open_json(file):
             return json.load(json_file)
     else:
         return None
-
 
 
 LIB_LIST_MAX = [
@@ -131,43 +41,47 @@ LIB_LIST_MAX = [
 LIB_LIST_MAX.sort(reverse=True)
 
 
-
 def generate_exfortables_file_path(input_store):
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     branch = input_store.get("branch")
-    
+
     reaction = input_store.get("reaction")
     level_num = input_store.get("level_num")
 
     target = f"{elem.capitalize()}-{str(int(mass))}"
     exfiles = []
-    
 
     if level_num:
         reaction = convert_partial_reactionstr_to_inl(reaction)
-        dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
-                        reaction.split(",")[0].lower(), 
-                        target,
-                        reaction.replace(",", "-").lower() + "-L"+str(level_num),
-                        type.lower() )
+        dir = os.path.join(
+            EXFORTABLES_PY_GIT_REPO_PATH,
+            reaction.split(",")[0].lower(),
+            target,
+            reaction.replace(",", "-").lower() + "-L" + str(level_num),
+            type.lower(),
+        )
 
     elif type == "FY":
         fy_type = input_store.get("fy_type")
-        dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
-                        reaction.split(",")[0].lower(), 
-                        target,
-                        reaction.replace(",", "-").lower(), 
-                        "fission/yield",
-                        fy_type.lower())
+        dir = os.path.join(
+            EXFORTABLES_PY_GIT_REPO_PATH,
+            reaction.split(",")[0].lower(),
+            target,
+            reaction.replace(",", "-").lower(),
+            "fission/yield",
+            fy_type.lower(),
+        )
 
     else:
-        dir = os.path.join( EXFORTABLES_PY_GIT_REPO_PATH, 
-                        reaction.split(",")[0].lower(), 
-                        target, 
-                        reaction.replace(",", "-").lower(), 
-                        type.lower() if type != "RP" else "xs")
+        dir = os.path.join(
+            EXFORTABLES_PY_GIT_REPO_PATH,
+            reaction.split(",")[0].lower(),
+            target,
+            reaction.replace(",", "-").lower(),
+            type.lower() if type != "RP" else "xs",
+        )
 
     if type == "RP":
         ## Format is "Ag-109-M"
@@ -176,7 +90,7 @@ def generate_exfortables_file_path(input_store):
         residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
 
         if os.path.exists(dir):
-            exfiles = [ f for f in os.listdir(dir)  if residual in f ]
+            exfiles = [f for f in os.listdir(dir) if residual in f]
 
     else:
         if os.path.exists(dir):
@@ -185,56 +99,54 @@ def generate_exfortables_file_path(input_store):
     return dir, exfiles
 
 
-
 def generate_endftables_file_path(input_store):
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
-    
+
     target = f"{elem.capitalize()}{str(int(mass)).zfill(3)}"
 
     libfiles = []
     for lib in LIB_LIST_MAX:
         if type == "FY":
-            dir = os.path.join( ENDFTABLES_PATH, 
-                        "FY",
-                        reaction.split(",")[0].lower(), 
-                        target,
-                        lib,
-                        "tables/FY"
-                        )
+            dir = os.path.join(
+                ENDFTABLES_PATH,
+                "FY",
+                reaction.split(",")[0].lower(),
+                target,
+                lib,
+                "tables/FY",
+            )
         else:
-            dir = os.path.join( ENDFTABLES_PATH, 
-                        reaction.split(",")[0].lower(), 
-                        target,
-                        lib,
-                        "tables",
-                        type.lower() if type != "RP" else "residual"
-                        )
-
+            dir = os.path.join(
+                ENDFTABLES_PATH,
+                reaction.split(",")[0].lower(),
+                target,
+                lib,
+                "tables",
+                type.lower() if type != "RP" else "residual",
+            )
 
         if type == "RP":
             rp_elem = input_store.get("rp_elem")
             rp_mass = input_store.get("rp_mass")
             residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}.{lib}"
             if os.path.exists(dir):
-                libfiles += [ f for f in os.listdir(dir) if residual in f ]
+                libfiles += [f for f in os.listdir(dir) if residual in f]
 
         else:
             if os.path.exists(dir):
-                libfiles += [ f for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f ]
+                libfiles += [f for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
 
     return dir, libfiles
-
 
 
 def generate_link_of_files(dir, files):
     ## similar to list_link_of_files in dataexplorer/common.py
     flinks = []
     for f in sorted(files):
-        
         filename = os.path.basename(f)
         dirname = os.path.dirname(f)
         linkdir = dirname.replace(DATA_DIR, "")
