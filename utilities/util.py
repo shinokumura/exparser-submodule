@@ -38,7 +38,7 @@ def split_by_number(x) -> list:
     # ['Br', '077', '']
     # ['Br', '077', 'g']
     # ['Br', '077', 'm']
-    return re.split(r'(\d+)', x)
+    return re.split(r"(\d+)", x)
 
 
 def flatten(xs):

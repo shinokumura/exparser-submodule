@@ -13,6 +13,7 @@ from submodules.utilities.util import libstyle_nuclide_expression
 
 connection = engines["endftables"].connect()
 
+
 ######## -------------------------------------- ########
 #    Queries for endftables
 ######## -------------------------------------- ########
@@ -22,7 +23,7 @@ def lib_query(input_store):
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
-    
+
     target = libstyle_nuclide_expression(elem, mass)
     queries = [
         Endf_Reactions.target == target,
@@ -35,7 +36,6 @@ def lib_query(input_store):
             Endf_Reactions.mt == mt.zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
 
-
     elif type == "RP":
         type = "residual"
         rp_elem = input_store.get("rp_elem")
@@ -43,15 +43,12 @@ def lib_query(input_store):
         residual = libstyle_nuclide_expression(rp_elem, rp_mass)
         queries.append(Endf_Reactions.residual == residual)
 
-
     elif type == "DA":
         type == "angle"
         queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
 
-
     elif type == "DE":
         type == "energy"
-
 
     queries.append(Endf_Reactions.type == type.lower())
     ## Establish session to the endftable database
@@ -60,12 +57,9 @@ def lib_query(input_store):
     libs = {}
     for r in reac:
         # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
-        libs[r.reaction_id] = {
-            "lib_name": r.evaluation,
-            "mf": r.mf,
-            "mt": r.mt,
-        }
+        libs[r.reaction_id] = r.evaluation
 
+    print(libs)
     return libs
 
 
@@ -76,31 +70,29 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
     data = (
         session_lib()
         .query(Endf_Reactions.residual)
-        .filter(Endf_Reactions.type == "residual", 
-                Endf_Reactions.projectile == inc_pt.lower(),
-                Endf_Reactions.target == target
-                )
-            ).all()
-    
+        .filter(
+            Endf_Reactions.type == "residual",
+            Endf_Reactions.projectile == inc_pt.lower(),
+            Endf_Reactions.target == target,
+        )
+    ).all()
+
     if data:
-        return sorted( [d[0] for d in data] )
-
-
+        return sorted([d[0] for d in data])
 
 
 def lib_data_query(input_store, ids):
     type = input_store["type"].upper()
-    df = pd.DataFrame()
+    
     if type == "XS":
-        df = lib_xs_data_query(ids)
+        print("here")
+        lib_xs_data_query(ids)
     elif type == "FY":
-        df = lib_fy_data_query(ids)
+        lib_fy_data_query(ids)
     elif type == "DA":
-        df = lib_da_data_query(ids)
+        lib_da_data_query(ids)
     elif type == "RP":
-        df = lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
-
-    return df
+        lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
 
 
 def lib_xs_data_query(ids):
@@ -133,7 +125,6 @@ def lib_da_data_query(ids):
     )
 
     return df
-
 
 
 def lib_residual_data_query(inc_pt, ids):
