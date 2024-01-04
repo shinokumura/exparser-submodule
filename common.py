@@ -41,6 +41,8 @@ LIB_LIST_MAX = [
 LIB_LIST_MAX.sort(reverse=True)
 
 
+
+
 def generate_exfortables_file_path(input_store):
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
@@ -99,7 +101,11 @@ def generate_exfortables_file_path(input_store):
     return dir, exfiles
 
 
+
 def generate_endftables_file_path(input_store):
+    """
+    Generate the direct file links
+    """
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
@@ -143,20 +149,25 @@ def generate_endftables_file_path(input_store):
     return dir, libfiles
 
 
+
+
+
 def generate_link_of_files(dir, files):
     ## similar to list_link_of_files in dataexplorer/common.py
     flinks = []
+
     for f in sorted(files):
         filename = os.path.basename(f)
         dirname = os.path.dirname(f)
         linkdir = dirname.replace(DATA_DIR, "")
 
         fullpath = os.path.join(dir, filename)
-        # a = html.A(
-        #     filename, href=fullpath, target="_blank"
-        # )
 
         flinks.append(linkdir)
         # flinks.append(html.Br())
-    print(flinks)
+
     return flinks
+
+
+
+
