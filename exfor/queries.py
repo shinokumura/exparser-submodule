@@ -113,7 +113,7 @@ def entries_query(**kwargs):
 
     if sf7:
         queries.append(Exfor_Reactions.sf7 == sf7.upper())
-        
+
     if sf8:
         queries.append(Exfor_Reactions.sf8.in_(sf8))
 
@@ -193,7 +193,7 @@ def facility_query(facility_code, facility_type):
 ########  -------------------------------------- ##########
 def index_query(input_store) -> dict:
     type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY"}
-    
+
     type = type_map.get(input_store.get("type").upper(), "SIG")
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
@@ -209,17 +209,25 @@ def index_query(input_store) -> dict:
         mesurement_opt_fy = input_store.get("mesurement_opt_fy")
 
         if branch:
-            queries.append(Exfor_Indexes.sf5 == branch.upper() if type != "FY" else Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
+            queries.append(
+                Exfor_Indexes.sf5 == branch.upper()
+                if type != "FY"
+                else Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper())))
+            )
         elif isinstance(level_num, int):
             reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend([Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num])
+            queries.extend(
+                [Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num]
+            )
         elif input_store.get("excl_junk_switch"):
             queries.append(Exfor_Indexes.sf5 == None)
 
         queries.append(
-            Exfor_Indexes.sf4 == "MASS" if mesurement_opt_fy == "A" else
-            Exfor_Indexes.sf4 == "ELEM" if mesurement_opt_fy == "Z" else
-            Exfor_Indexes.sf4.isnot(None)
+            Exfor_Indexes.sf4 == "MASS"
+            if mesurement_opt_fy == "A"
+            else Exfor_Indexes.sf4 == "ELEM"
+            if mesurement_opt_fy == "Z"
+            else Exfor_Indexes.sf4.isnot(None)
         )
 
         if reac_product_fy:
@@ -232,10 +240,16 @@ def index_query(input_store) -> dict:
         level_num = input_store.get("level_num")  # Moved this line
 
         if branch:
-            queries.append(Exfor_Indexes.sf5 == branch.upper() if type != "FY" else Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper()))))
+            queries.append(
+                Exfor_Indexes.sf5 == branch.upper()
+                if type != "FY"
+                else Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper())))
+            )
         elif isinstance(level_num, int):
             reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend([Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num])
+            queries.extend(
+                [Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num]
+            )
         elif input_store.get("excl_junk_switch") or not branch:
             queries.append(Exfor_Indexes.sf5 == None)
 
@@ -250,14 +264,23 @@ def index_query(input_store) -> dict:
                 if rp_mass.endswith(("m", "M", "g", "G", "L", "M1", "M2", "m1", "m2"))
                 else rp_elem.capitalize() + "-" + str(rp_mass)
             )
-            queries.extend([Exfor_Indexes.projectile == reaction, Exfor_Indexes.residual == rp_mass])
+            queries.extend(
+                [
+                    Exfor_Indexes.projectile == reaction,
+                    Exfor_Indexes.residual == rp_mass,
+                ]
+            )
         else:
-            queries.append(Exfor_Indexes.process == reaction.replace("total", "tot").upper())
+            queries.append(
+                Exfor_Indexes.process == reaction.replace("total", "tot").upper()
+            )
             if not any(r in reaction for r in ("tot", "f")):
-                queries.extend([
-                    ~Exfor_Indexes.sf4.endswith(f"-{suffix}")
-                    for suffix in ("G", "M", "L", "M1", "M2")
-                ])
+                queries.extend(
+                    [
+                        ~Exfor_Indexes.sf4.endswith(f"-{suffix}")
+                        for suffix in ("G", "M", "L", "M1", "M2")
+                    ]
+                )
 
     if input_store.get("excl_junk_switch"):
         queries.extend([Exfor_Indexes.sf7 == None, Exfor_Indexes.sf8 == None])
@@ -265,22 +288,28 @@ def index_query(input_store) -> dict:
     queries.extend([Exfor_Indexes.sf6 == type.upper()])
     reac = session().query(Exfor_Indexes).filter(*queries).all()
 
-    entries = {
-        ent.entry_id: {
-            "level_num": ent.level_num,
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
-            "points": ent.points,
-            "x4_code": ent.x4_code,
-            "sf4": ent.sf4,
-            "sf5": ent.sf5,
-            "sf6": ent.sf6,
-            "sf7": ent.sf7,
-            "sf8": ent.sf8,
-            "mt": ent.mt,
-            "mf": ent.mf,
-        } for ent in reac
-    } if reac else {}
+    entries = (
+        {
+            ent.entry_id: {
+                "level_num": ent.level_num,
+                "e_inc_min": ent.e_inc_min,
+                "e_inc_max": ent.e_inc_max,
+                "points": ent.points,
+                "x4_code": ent.x4_code,
+                "sf4": ent.sf4,
+                "sf5": ent.sf5,
+                "sf6": ent.sf6,
+                "sf7": ent.sf7,
+                "sf8": ent.sf8,
+                "sf9": ent.sf9,
+                "mt": ent.mt,
+                "mf": ent.mf,
+            }
+            for ent in reac
+        }
+        if reac
+        else {}
+    )
 
     return entries
 
@@ -299,7 +328,6 @@ def get_entry_bib(entries):
     return OrderedDict(
         sorted(legend.items(), key=lambda x: getitem(x[1], "year"), reverse=True),
     )
-
 
 
 def entry_query_by_id(entries):
@@ -340,32 +368,6 @@ def index_query_by_id(entries):
 
     return df
 
-
-
-
-def data_query_thermal(input_store, entids):
-    # print(entids)
-    queries = [
-        Exfor_Data.entry_id.in_(tuple(entids)),
-        Exfor_Data.en_inc >= 2.52E-8,
-        Exfor_Data.en_inc <= 2.54E-8,
-        ]
-    data = (
-        session()
-        .query(
-            Exfor_Data.entry_id,
-            Exfor_Data.en_inc,
-            Exfor_Data.den_inc,
-            Exfor_Data.data,
-            Exfor_Data.ddata,
-        )
-        .filter(*queries)
-    )
-    df = pd.read_sql(
-        sql=data.statement,
-        con=connection,
-    )
-    return df
 
 
 
@@ -450,6 +452,23 @@ def data_query(input_store, entids):
                 Exfor_Data.den_inc,
                 Exfor_Data.e_out,
                 Exfor_Data.de_out,
+                Exfor_Data.data,
+                Exfor_Data.ddata,
+            )
+            .filter(*queries)
+        )
+    elif type.upper() == "TH":
+        """
+        to limit the data near the thermal energy
+        """
+        queries.append(Exfor_Data.en_inc >= 2.52E-8)
+        queries.append(Exfor_Data.en_inc <= 2.54E-8)
+        data = (
+            session()
+            .query(
+                Exfor_Data.entry_id,
+                Exfor_Data.en_inc,
+                Exfor_Data.den_inc,
                 Exfor_Data.data,
                 Exfor_Data.ddata,
             )

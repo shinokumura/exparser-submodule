@@ -17,7 +17,6 @@ from config import MT_PATH_JSON
 from submodules.utilities.util import get_number_from_string, get_str_from_string
 
 
-
 resid_mt_range = {
     "N": list(range(50, 90)),
     "P": list(range(600, 649)),
@@ -110,9 +109,6 @@ def exfor_reaction_list(projectile):
 def get_mt(reac):
     reactions = reaction_list(reac.split(",")[0].upper())
     return reactions[reac.split(",")[1].upper()]["mt"]
-
-
-
 
 
 def convert_partial_reactionstr_to_inl(reaction):

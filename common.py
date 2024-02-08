@@ -37,10 +37,10 @@ LIB_LIST_MAX = [
     "cendl3.2",
     "irdff2.0",
     "iaea.pd",
+    "eaf.2010",
+
 ]
 LIB_LIST_MAX.sort(reverse=True)
-
-
 
 
 def generate_exfortables_file_path(input_store):
@@ -54,6 +54,9 @@ def generate_exfortables_file_path(input_store):
 
     target = f"{elem.capitalize()}-{str(int(mass))}"
     exfiles = []
+
+    if type == "TH":
+        type = "XS"
 
     if level_num:
         reaction = convert_partial_reactionstr_to_inl(reaction)
@@ -101,7 +104,6 @@ def generate_exfortables_file_path(input_store):
     return dir, exfiles
 
 
-
 def generate_endftables_file_path(input_store):
     """
     Generate the direct file links
@@ -113,6 +115,9 @@ def generate_endftables_file_path(input_store):
     mt = input_store.get("mt")
 
     target = f"{elem.capitalize()}{str(int(mass)).zfill(3)}"
+
+    if type == "TH":
+        type = "XS"
 
     libfiles = []
     for lib in LIB_LIST_MAX:
@@ -149,9 +154,6 @@ def generate_endftables_file_path(input_store):
     return dir, libfiles
 
 
-
-
-
 def generate_link_of_files(dir, files):
     ## similar to list_link_of_files in dataexplorer/common.py
     flinks = []
@@ -167,7 +169,3 @@ def generate_link_of_files(dir, files):
         # flinks.append(html.Br())
 
     return flinks
-
-
-
-

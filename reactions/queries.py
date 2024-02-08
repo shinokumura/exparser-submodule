@@ -59,7 +59,7 @@ def lib_query(input_store):
         # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
         libs[r.reaction_id] = r.evaluation
 
-    print(libs)
+    # print(libs)
     return libs
 
 
@@ -83,16 +83,18 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
 
 def lib_data_query(input_store, ids):
     type = input_store["type"].upper()
-    
+
     if type == "XS":
-        print("here")
-        lib_xs_data_query(ids)
+        return lib_xs_data_query(ids)
     elif type == "FY":
-        lib_fy_data_query(ids)
+        return lib_fy_data_query(ids)
     elif type == "DA":
-        lib_da_data_query(ids)
+        return lib_da_data_query(ids)
     elif type == "RP":
-        lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
+        return lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
+    elif type == "TH":
+        pass
+
 
 
 def lib_xs_data_query(ids):
