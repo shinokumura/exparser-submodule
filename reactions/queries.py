@@ -10,7 +10,7 @@ from endftables_sql.models import (
     Endf_FY_Data,
 )
 from submodules.utilities.util import libstyle_nuclide_expression
-
+print(engines)
 connection = engines["endftables"].connect()
 
 
@@ -30,11 +30,13 @@ def lib_query(input_store):
         Endf_Reactions.projectile == reaction.split(",")[0].lower(),
     ]
 
-    if type == "XS" or type == "DA" or type == "FY":
+    if type == "XS" or type == "DA" or type == "FY" or type == "TH":
         mt = input_store.get("mt")
         queries.append(
             Endf_Reactions.mt == mt.zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
+        if type == "TH":
+            type = "XS"
 
     elif type == "RP":
         type = "residual"
@@ -86,23 +88,41 @@ def lib_data_query(input_store, ids):
 
     if type == "XS":
         return lib_xs_data_query(ids)
+    elif type == "TH":
+        return lib_th_data_query(ids)
     elif type == "FY":
         return lib_fy_data_query(ids)
     elif type == "DA":
         return lib_da_data_query(ids)
     elif type == "RP":
         return lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
-    elif type == "TH":
-        pass
 
 
 
 def lib_xs_data_query(ids):
-    # connection = engines["endftables"].connect()
     data = (
         session_lib()
         .query(Endf_XS_Data)
         .filter(Endf_XS_Data.reaction_id.in_(tuple(ids)))
+    )
+
+    df = pd.read_sql(
+        sql=data.statement,
+        con=connection,
+    )
+
+    return df
+
+
+
+def lib_th_data_query(ids):
+    queries = [ Endf_XS_Data.reaction_id.in_(tuple(ids)) ]
+    queries.append(Endf_XS_Data.en_inc >= 2.52E-8)
+    queries.append(Endf_XS_Data.en_inc <= 2.54E-8)
+    data = (
+        session_lib()
+        .query(Endf_XS_Data)
+        .filter(*queries)
     )
 
     df = pd.read_sql(

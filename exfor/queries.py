@@ -192,9 +192,8 @@ def facility_query(facility_code, facility_type):
 ##         Reaction queries for the dataexplorer
 ########  -------------------------------------- ##########
 def index_query(input_store) -> dict:
-    type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY"}
 
-    type = type_map.get(input_store.get("type").upper(), "SIG")
+    type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
@@ -254,6 +253,7 @@ def index_query(input_store) -> dict:
             queries.append(Exfor_Indexes.sf5 == None)
 
         if type == "RP":
+            print("hi")
             reaction = reaction.split(",")[0].upper()
             rp_mass = (
                 rp_elem.capitalize()
@@ -283,7 +283,11 @@ def index_query(input_store) -> dict:
                 )
 
     if input_store.get("excl_junk_switch"):
-        queries.extend([Exfor_Indexes.sf7 == None, Exfor_Indexes.sf8 == None])
+        queries.extend([Exfor_Indexes.sf7 == None, Exfor_Indexes.sf8 == None, Exfor_Indexes.sf9 == None])
+
+
+    type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY"}
+    type = type_map.get(input_store.get("type").upper(), "SIG")
 
     queries.extend([Exfor_Indexes.sf6 == type.upper()])
     reac = session().query(Exfor_Indexes).filter(*queries).all()
