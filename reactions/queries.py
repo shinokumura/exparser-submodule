@@ -10,7 +10,7 @@ from endftables_sql.models import (
     Endf_FY_Data,
 )
 from submodules.utilities.util import libstyle_nuclide_expression
-print(engines)
+
 connection = engines["endftables"].connect()
 
 
@@ -18,7 +18,6 @@ connection = engines["endftables"].connect()
 #    Queries for endftables
 ######## -------------------------------------- ########
 def lib_query(input_store):
-    # print(input_store)
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
@@ -51,22 +50,22 @@ def lib_query(input_store):
 
     elif type == "DE":
         type == "energy"
+        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
 
     queries.append(Endf_Reactions.type == type.lower())
-    ## Establish session to the endftable database
+
     reac = session_lib().query(Endf_Reactions).filter(*queries).all()
 
     libs = {}
     for r in reac:
-        # print(r.reaction_id, r.evaluation, r.target, r.projectile, r.process, r.residual, r.mt)
         libs[r.reaction_id] = r.evaluation
 
-    # print(libs)
+
     return libs
 
 
+
 def lib_residual_nuclide_list(elem, mass, inc_pt):
-    # print(input_store)
     target = libstyle_nuclide_expression(elem, mass)
 
     data = (
@@ -78,9 +77,9 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
             Endf_Reactions.target == target,
         )
     ).all()
-
     if data:
-        return sorted([d[0] for d in data])
+        return [d[0] for d in data]
+
 
 
 def lib_data_query(input_store, ids):
@@ -88,12 +87,16 @@ def lib_data_query(input_store, ids):
 
     if type == "XS":
         return lib_xs_data_query(ids)
+    
     elif type == "TH":
         return lib_th_data_query(ids)
+    
     elif type == "FY":
         return lib_fy_data_query(ids)
+    
     elif type == "DA":
         return lib_da_data_query(ids)
+    
     elif type == "RP":
         return lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
 
@@ -134,7 +137,6 @@ def lib_th_data_query(ids):
 
 
 def lib_da_data_query(ids):
-    # connection = engines["endftables"].connect()
     data = (
         session_lib()
         .query(Endf_ANGLE_Data)
@@ -150,8 +152,6 @@ def lib_da_data_query(ids):
 
 
 def lib_residual_data_query(inc_pt, ids):
-    # connection = engines["endftables"].connect()
-
     if inc_pt.lower() == "n":
         data = (
             session_lib()
@@ -174,7 +174,6 @@ def lib_residual_data_query(inc_pt, ids):
 
 
 def lib_fy_data_query(ids):
-    # connection = engines["endftables"].connect()
     data = (
         session_lib()
         .query(Endf_FY_Data)

@@ -41,7 +41,6 @@ def get_exfor_indexes_table():
 ##  EXFOR entry queries for the dataexplorer/api/exfor/search  ##
 ########  -------------------------------------------- ##########
 def entries_query(**kwargs):
-    print(kwargs)
     # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
     # connection = engines["exfor"].connect()
     queries = []
@@ -159,7 +158,7 @@ def entries_query(**kwargs):
         sql=reac.statement,
         con=connection,
     )
-    # print(df)
+
     return df
 
 
@@ -184,7 +183,7 @@ def facility_query(facility_code, facility_type):
         sql=reac.statement,
         con=connection,
     )
-    # print(df)
+
     return df
 
 
@@ -253,7 +252,6 @@ def index_query(input_store) -> dict:
             queries.append(Exfor_Indexes.sf5 == None)
 
         if type == "RP":
-            print("hi")
             reaction = reaction.split(",")[0].upper()
             rp_mass = (
                 rp_elem.capitalize()
@@ -569,7 +567,6 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper):
             "x4_code": ent.x4_code,
         }
         entries += [ent.entry]
-    # print(entids)
 
     return entids, entries
 

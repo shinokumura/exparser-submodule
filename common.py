@@ -18,7 +18,7 @@ import json
 from config import DATA_DIR, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
 from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
-
+from submodules.utilities.util import get_str_from_string, get_number_from_string
 
 def open_json(file):
     if os.path.exists(file):
@@ -94,6 +94,12 @@ def generate_exfortables_file_path(input_store):
         rp_mass = input_store.get("rp_mass")
         residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
 
+        if not get_str_from_string(rp_mass):
+            residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}"
+            
+        else:
+            residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}"
+
         if os.path.exists(dir):
             exfiles = [f for f in os.listdir(dir) if residual in f]
 
@@ -143,7 +149,13 @@ def generate_endftables_file_path(input_store):
         if type == "RP":
             rp_elem = input_store.get("rp_elem")
             rp_mass = input_store.get("rp_mass")
-            residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}.{lib}"
+
+            if not get_str_from_string(rp_mass):
+                residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}.{lib}"
+                
+            else:
+                residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}.{lib}"
+
             if os.path.exists(dir):
                 libfiles += [f for f in os.listdir(dir) if residual in f]
 
