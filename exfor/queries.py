@@ -233,8 +233,6 @@ def index_query(input_store) -> dict:
 
     else:
         branch = input_store.get("branch")
-        rp_elem = input_store.get("rp_elem")
-        rp_mass = input_store.get("rp_mass")
         level_num = input_store.get("level_num")  # Moved this line
 
         if branch:
@@ -252,6 +250,8 @@ def index_query(input_store) -> dict:
             queries.append(Exfor_Indexes.sf5 == None)
 
         if type == "RP":
+            rp_elem = input_store.get("rp_elem")
+            rp_mass = input_store.get("rp_mass")
             reaction = reaction.split(",")[0].upper()
             rp_mass = (
                 rp_elem.capitalize()
@@ -259,7 +259,7 @@ def index_query(input_store) -> dict:
                 + str(get_number_from_string(rp_mass))
                 + "-"
                 + get_str_from_string(str(rp_mass)).upper()
-                if rp_mass.endswith(("m", "M", "g", "G", "L", "M1", "M2", "m1", "m2"))
+                if rp_mass.upper().endswith(( "M", "G", "L", "M1", "M2", "L1", "L2"))
                 else rp_elem.capitalize() + "-" + str(rp_mass)
             )
             queries.extend(
@@ -276,7 +276,7 @@ def index_query(input_store) -> dict:
                 queries.extend(
                     [
                         ~Exfor_Indexes.sf4.endswith(f"-{suffix}")
-                        for suffix in ("G", "M", "L", "M1", "M2")
+                        for suffix in ("G", "M", "L", "M1", "M2", "L1", "L2")
                     ]
                 )
 
@@ -284,7 +284,7 @@ def index_query(input_store) -> dict:
         queries.extend([Exfor_Indexes.sf7 == None, Exfor_Indexes.sf8 == None, Exfor_Indexes.sf9 == None])
 
 
-    type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY"}
+    type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY", "DA": "DA"}
     type = type_map.get(input_store.get("type").upper(), "SIG")
 
     queries.extend([Exfor_Indexes.sf6 == type.upper()])
@@ -554,21 +554,32 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper):
 
     reac = session().query(Exfor_Indexes).filter(*queries).all()
 
-    entids = {}
-    entries = []
 
-    for ent in reac:
-        entids[ent.entry_id] = {
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
-            "points": ent.points,
-            "sf5": ent.sf5,
-            "sf8": ent.sf8,
-            "x4_code": ent.x4_code,
+    entries = (
+        {
+            ent.entry_id: {
+                "e_inc_min": ent.e_inc_min,
+                "e_inc_max": ent.e_inc_max,
+                "points": ent.points,
+                "x4_code": ent.x4_code,
+                "sf4": ent.sf4,
+                "sf5": ent.sf5,
+                "sf6": ent.sf6,
+                "sf7": ent.sf7,
+                "sf8": ent.sf8,
+                "sf9": ent.sf9,
+                "mt": ent.mt,
+                "mf": ent.mf,
+            }
+            for ent in reac
         }
-        entries += [ent.entry]
+        if reac
+        else {}
+    )
 
-    return entids, entries
+
+
+    return entries
 
 
 ########  -------------------------------------- ##########

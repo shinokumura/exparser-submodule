@@ -32,10 +32,14 @@ def lib_query(input_store):
     if type == "XS" or type == "DA" or type == "FY" or type == "TH":
         mt = input_store.get("mt")
         queries.append(
-            Endf_Reactions.mt == mt.zfill(3)
+            Endf_Reactions.mt == mt #.zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
         if type == "TH":
             type = "XS"
+        if type == "DA":
+            type = "angle"
+        elif type == "DE":
+            type = "energy"
 
     elif type == "RP":
         type = "residual"
@@ -43,14 +47,6 @@ def lib_query(input_store):
         rp_mass = input_store.get("rp_mass")
         residual = libstyle_nuclide_expression(rp_elem, rp_mass)
         queries.append(Endf_Reactions.residual == residual)
-
-    elif type == "DA":
-        type == "angle"
-        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
-
-    elif type == "DE":
-        type == "energy"
-        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
 
     queries.append(Endf_Reactions.type == type.lower())
 

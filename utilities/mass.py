@@ -22,9 +22,10 @@
 #             mass_range[z_mass[0]] = {"min": z_mass[1].strip(), "max": z_mass[2].strip()}
 #     return mass_range
 
-# mass_range = read_mass_range()
-# print(json.dumps(mass_range, indent =1))
 
+# Minimum and maximum mass number in charge number
+# Original data was provided by Marco VERPELLI (IAEA-NDS)
+# in z,min,max format
 mass_range = {
     "0": {"min": "1", "max": "6"},
     "1": {"min": "1", "max": "7"},

@@ -15,6 +15,7 @@ import os
 import shutil
 import time
 import json
+import math
 from submodules.utilities.elem import elemtoz_nz
 
 
@@ -151,3 +152,11 @@ def libstyle_nuclide_expression(elem, mass):
         return f"{elem.capitalize()}{get_number_from_string(mass).zfill(3)}{get_str_from_string(mass).replace('-', '').lower()}"
 
     return f"{elem.capitalize()}{get_number_from_string(mass).zfill(3)}"
+
+
+def round_half_up(n, decimals=0):
+    multiplier = 10**decimals
+    return math.floor(n * multiplier + 0.5) / multiplier
+
+
+
