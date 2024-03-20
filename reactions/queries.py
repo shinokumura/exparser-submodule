@@ -32,7 +32,7 @@ def lib_query(input_store):
     if type == "XS" or type == "DA" or type == "FY" or type == "TH":
         mt = input_store.get("mt")
         queries.append(
-            Endf_Reactions.mt == mt #.zfill(3)
+            Endf_Reactions.mt == mt  # .zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
         if type == "TH":
             type = "XS"
@@ -56,9 +56,7 @@ def lib_query(input_store):
     for r in reac:
         libs[r.reaction_id] = r.evaluation
 
-
     return libs
-
 
 
 def lib_residual_nuclide_list(elem, mass, inc_pt):
@@ -77,25 +75,25 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
         return [d[0] for d in data]
 
 
-
 def lib_data_query(input_store, ids):
     type = input_store["type"].upper()
 
     if type == "XS":
         return lib_xs_data_query(ids)
-    
+
     elif type == "TH":
         return lib_th_data_query(ids)
-    
+
     elif type == "FY":
         return lib_fy_data_query(ids)
-    
+
     elif type == "DA":
         return lib_da_data_query(ids)
-    
-    elif type == "RP":
-        return lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
 
+    elif type == "RP":
+        return lib_residual_data_query(
+            input_store["reaction"].split(",")[0].lower(), ids
+        )
 
 
 def lib_xs_data_query(ids):
@@ -113,16 +111,11 @@ def lib_xs_data_query(ids):
     return df
 
 
-
 def lib_th_data_query(ids):
-    queries = [ Endf_XS_Data.reaction_id.in_(tuple(ids)) ]
-    queries.append(Endf_XS_Data.en_inc >= 2.52E-8)
-    queries.append(Endf_XS_Data.en_inc <= 2.54E-8)
-    data = (
-        session_lib()
-        .query(Endf_XS_Data)
-        .filter(*queries)
-    )
+    queries = [Endf_XS_Data.reaction_id.in_(tuple(ids))]
+    queries.append(Endf_XS_Data.en_inc >= 2.52e-8)
+    queries.append(Endf_XS_Data.en_inc <= 2.54e-8)
+    data = session_lib().query(Endf_XS_Data).filter(*queries)
 
     df = pd.read_sql(
         sql=data.statement,

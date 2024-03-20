@@ -57,12 +57,8 @@ def flatten_list(list):
 
 
 def check_list(init_list):
-    print(init_list)
     # print(any(isinstance(i, list) for i in init_list))
-
     def _is_list_instance(init_list):
-        print(isinstance(init_list, list))
-
         sub_list = flatten_list(init_list)
         _is_list_instance(sub_list)
 
@@ -138,8 +134,6 @@ def print_time(start_time=None):
 
 
 def x4style_nuclide_expression(elem, mass):
-    print(get_str_from_string(mass))
-
     if get_str_from_string(mass) != "":
         return f"{elemtoz_nz(elem)}-{elem.upper()}-{get_number_from_string(mass)}-{get_str_from_string(mass).replace('-', '').upper()}"
 
@@ -147,7 +141,6 @@ def x4style_nuclide_expression(elem, mass):
 
 
 def libstyle_nuclide_expression(elem, mass):
-    print(get_str_from_string(mass))
     if get_str_from_string(mass) != "":
         return f"{elem.capitalize()}{get_number_from_string(mass).zfill(3)}{get_str_from_string(mass).replace('-', '').lower()}"
 
@@ -157,6 +150,3 @@ def libstyle_nuclide_expression(elem, mass):
 def round_half_up(n, decimals=0):
     multiplier = 10**decimals
     return math.floor(n * multiplier + 0.5) / multiplier
-
-
-

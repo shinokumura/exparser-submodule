@@ -191,7 +191,6 @@ def facility_query(facility_code, facility_type):
 ##         Reaction queries for the dataexplorer
 ########  -------------------------------------- ##########
 def index_query(input_store) -> dict:
-
     type = input_store.get("type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
@@ -259,7 +258,7 @@ def index_query(input_store) -> dict:
                 + str(get_number_from_string(rp_mass))
                 + "-"
                 + get_str_from_string(str(rp_mass)).upper()
-                if rp_mass.upper().endswith(( "M", "G", "L", "M1", "M2", "L1", "L2"))
+                if rp_mass.upper().endswith(("M", "G", "L", "M1", "M2", "L1", "L2"))
                 else rp_elem.capitalize() + "-" + str(rp_mass)
             )
             queries.extend(
@@ -281,8 +280,13 @@ def index_query(input_store) -> dict:
                 )
 
     if input_store.get("excl_junk_switch"):
-        queries.extend([Exfor_Indexes.sf7 == None, Exfor_Indexes.sf8 == None, Exfor_Indexes.sf9 == None])
-
+        queries.extend(
+            [
+                Exfor_Indexes.sf7 == None,
+                Exfor_Indexes.sf8 == None,
+                Exfor_Indexes.sf9 == None,
+            ]
+        )
 
     type_map = {"XS": "SIG", "TH": "SIG", "RP": "SIG", "FY": "FY", "DA": "DA"}
     type = type_map.get(input_store.get("type").upper(), "SIG")
@@ -369,8 +373,6 @@ def index_query_by_id(entries):
     )
 
     return df
-
-
 
 
 def data_query(input_store, entids):
@@ -463,8 +465,8 @@ def data_query(input_store, entids):
         """
         to limit the data near the thermal energy
         """
-        queries.append(Exfor_Data.en_inc >= 2.52E-8)
-        queries.append(Exfor_Data.en_inc <= 2.54E-8)
+        queries.append(Exfor_Data.en_inc >= 2.52e-8)
+        queries.append(Exfor_Data.en_inc <= 2.54e-8)
         data = (
             session()
             .query(
@@ -554,7 +556,6 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper):
 
     reac = session().query(Exfor_Indexes).filter(*queries).all()
 
-
     entries = (
         {
             ent.entry_id: {
@@ -576,8 +577,6 @@ def index_query_fission(type, elem, mass, reaction, branch, lower, upper):
         if reac
         else {}
     )
-
-
 
     return entries
 

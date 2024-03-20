@@ -20,6 +20,7 @@ from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 from submodules.utilities.util import get_str_from_string, get_number_from_string
 
+
 def open_json(file):
     if os.path.exists(file):
         with open(file) as json_file:
@@ -38,7 +39,6 @@ LIB_LIST_MAX = [
     "irdff2.0",
     "iaea.pd",
     "eaf.2010",
-
 ]
 LIB_LIST_MAX.sort(reverse=True)
 
@@ -96,13 +96,12 @@ def generate_exfortables_file_path(input_store):
 
         if not get_str_from_string(rp_mass):
             residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
-            
+
         else:
             residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}-{get_str_from_string(rp_mass).upper()}"
 
         if os.path.exists(dir):
             exfiles = [f for f in os.listdir(dir) if residual in f]
-            print(dir, residual, exfiles)
 
     else:
         if os.path.exists(dir):
@@ -153,7 +152,7 @@ def generate_endftables_file_path(input_store):
 
             if not get_str_from_string(rp_mass):
                 residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}.{lib}"
-                
+
             else:
                 residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}.{lib}"
 
