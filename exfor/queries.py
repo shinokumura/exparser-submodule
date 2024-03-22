@@ -252,7 +252,7 @@ def index_query(input_store) -> dict:
             rp_elem = input_store.get("rp_elem")
             rp_mass = input_store.get("rp_mass")
             reaction = reaction.split(",")[0].upper()
-            rp_mass = (
+            rp = (
                 rp_elem.capitalize()
                 + "-"
                 + str(get_number_from_string(rp_mass))
@@ -264,7 +264,7 @@ def index_query(input_store) -> dict:
             queries.extend(
                 [
                     Exfor_Indexes.projectile == reaction,
-                    Exfor_Indexes.residual == rp_mass,
+                    Exfor_Indexes.residual == rp,
                 ]
             )
         else:
@@ -411,6 +411,7 @@ def data_query(input_store, entids):
                 Exfor_Data.entry_id,
                 Exfor_Data.en_inc,
                 Exfor_Data.den_inc,
+                Exfor_Data.level_num,
                 Exfor_Data.residual,
                 Exfor_Data.data,
                 Exfor_Data.ddata,
