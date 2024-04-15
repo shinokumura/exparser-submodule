@@ -30,15 +30,15 @@ def open_json(file):
 
 
 LIB_LIST_MAX = [
-    # "tendl.2023",
-    "tendl.2021",
+    "tendl.2023",
+    # "tendl.2021",
     "endfb8.0",
     "eaf.2010", # European Activation File
     "jeff3.3",
-    # "jendl5.0",
-    "jendl4.0",
-    # "iaea.2022",
-    "iaea.2019",
+    "jendl5.0",
+    # "jendl4.0",
+    "iaea.2022",
+    # "iaea.2019",
     "cendl3.2",
     "irdff2.0",
     "iaea.pd",
