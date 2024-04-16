@@ -196,12 +196,12 @@ def index_query(input_store) -> dict:
     mass = input_store.get("target_mass")
     reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
 
+
     target = x4style_nuclide_expression(elem, mass)
     queries = [Exfor_Indexes.target == target, Exfor_Indexes.arbitrary_data == False]
 
     if type == "FY":
         branch = input_store.get("branch")
-        level_num = input_store.get("level_num")
         reac_product_fy = input_store.get("reac_product_fy")
         mesurement_opt_fy = input_store.get("mesurement_opt_fy")
 
@@ -211,26 +211,23 @@ def index_query(input_store) -> dict:
                 if type != "FY"
                 else Exfor_Indexes.sf5.in_(tuple(fy_branch(branch.upper())))
             )
-        elif isinstance(level_num, int):
-            reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend(
-                [Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num]
-            )
-        elif input_store.get("excl_junk_switch"):
-            queries.append(Exfor_Indexes.sf5 == None)
-
-        queries.append(
-            Exfor_Indexes.sf4 == "MASS"
-            if mesurement_opt_fy == "A"
-            else Exfor_Indexes.sf4 == "ELEM"
-            if mesurement_opt_fy == "Z"
-            else Exfor_Indexes.sf4.isnot(None)
-        )
 
         if reac_product_fy:
             queries.append(Exfor_Indexes.residual.in_(reac_product_fy))
 
+        queries.extend([
+            Exfor_Indexes.sf4 == "MASS"
+            if mesurement_opt_fy == "A"
+            else Exfor_Indexes.sf4 == "ELEM"
+            if mesurement_opt_fy == "Z"
+            else Exfor_Indexes.sf4.isnot(None),
+            
+            Exfor_Indexes.process == reaction.upper()
+        ]
+        )
+
     else:
+        ''' Cases for non-FY data'''
         branch = input_store.get("branch")
         level_num = input_store.get("level_num")  # Moved this line
 
@@ -245,8 +242,8 @@ def index_query(input_store) -> dict:
             queries.extend(
                 [Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num]
             )
-        elif input_store.get("excl_junk_switch") or not branch:
-            queries.append(Exfor_Indexes.sf5 == None)
+        # elif input_store.get("excl_junk_switch") or not branch:
+        #     queries.append(Exfor_Indexes.sf5 == None)
 
         if type == "RP":
             rp_elem = input_store.get("rp_elem")
