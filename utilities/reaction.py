@@ -190,6 +190,7 @@ mt_list = {
     "205": "Xt",
     "206": "Xh",
     "207": "Xa",
+    "451": "Descriptive Data and Directory",
     "452": "nu_bar_t average total number of neutrons",
     "454": "Independent fission product yield data",
     "455": "nu_bar_d average number of delayed neutrons",
@@ -197,6 +198,7 @@ mt_list = {
     "457": "Radioactive decay data",
     "458": "Energy release in fission for incident neutrons",
     "459": "Cumulative fission product yield data",
+    "460": "Delayed Photon Data",
 }
 
 
@@ -217,8 +219,8 @@ def generate_mt_list(projectile):
             for n in range(len(resid_mt_range[p.upper()])):
                 partial[
                     str(resid_mt_range[p.upper()][n])
-                ] = f"({projectile.lower()},{p.lower()}{str(n)})"
-
+                ] = f"{projectile.lower()},{p.lower()}{str(n)}"
+    # print(all, partial)
     return dict(**all, **partial)
 
 

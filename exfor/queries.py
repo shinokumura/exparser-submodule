@@ -196,7 +196,6 @@ def index_query(input_store) -> dict:
     mass = input_store.get("target_mass")
     reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
 
-
     target = x4style_nuclide_expression(elem, mass)
     queries = [Exfor_Indexes.target == target, Exfor_Indexes.arbitrary_data == False]
 
@@ -215,19 +214,19 @@ def index_query(input_store) -> dict:
         if reac_product_fy:
             queries.append(Exfor_Indexes.residual.in_(reac_product_fy))
 
-        queries.extend([
-            Exfor_Indexes.sf4 == "MASS"
-            if mesurement_opt_fy == "A"
-            else Exfor_Indexes.sf4 == "ELEM"
-            if mesurement_opt_fy == "Z"
-            else Exfor_Indexes.sf4.isnot(None),
-            
-            Exfor_Indexes.process == reaction.upper()
-        ]
+        queries.extend(
+            [
+                Exfor_Indexes.sf4 == "MASS"
+                if mesurement_opt_fy == "A"
+                else Exfor_Indexes.sf4 == "ELEM"
+                if mesurement_opt_fy == "Z"
+                else Exfor_Indexes.sf4.isnot(None),
+                Exfor_Indexes.process == reaction.upper(),
+            ]
         )
 
     else:
-        ''' Cases for non-FY data'''
+        """Cases for non-FY data"""
         branch = input_store.get("branch")
         level_num = input_store.get("level_num")  # Moved this line
 
@@ -242,8 +241,8 @@ def index_query(input_store) -> dict:
             queries.extend(
                 [Exfor_Indexes.sf5 == "PAR", Exfor_Indexes.level_num == level_num]
             )
-        # elif input_store.get("excl_junk_switch") or not branch:
-        #     queries.append(Exfor_Indexes.sf5 == None)
+        else:
+            queries.append(Exfor_Indexes.sf5 == None)
 
         if type == "RP":
             rp_elem = input_store.get("rp_elem")
@@ -606,15 +605,14 @@ def join_reaction_bib():
             Exfor_Bib.main_facility_type,
             func.min(Exfor_Indexes.e_inc_min).label("e_inc_min"),
             func.max(Exfor_Indexes.e_inc_max).label("e_inc_max"),
-            # Exfor_Indexes.e_inc_min
         )
         .join(
             Exfor_Bib,
             Exfor_Reactions.entry == Exfor_Bib.entry,
         )
-        .join(
+        .outerjoin(
             Exfor_Indexes,
-            Exfor_Indexes.entry_id == Exfor_Reactions.entry_id,
+            Exfor_Reactions.entry_id == Exfor_Indexes.entry_id,
         )
         .group_by(Exfor_Reactions.entry_id)
         .order_by(Exfor_Bib.year.desc())
@@ -622,6 +620,7 @@ def join_reaction_bib():
 
     df = pd.read_sql(
         sql=all.statement,
+        # sql=all,
         con=connection,
     )
 
