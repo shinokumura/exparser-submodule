@@ -16,7 +16,8 @@ import shutil
 import time
 import json
 import math
-from submodules.utilities.elem import elemtoz_nz
+from datetime import datetime, timedelta
+from .elem import elemtoz_nz
 
 
 def slices(s, *args):
@@ -111,22 +112,15 @@ def del_outputs(name, outpath):
     os.mkdir(path)
 
 
-def process_time(func):
-    """
-    for debugging purpose, delete @decorator
-    """
 
-    def inner(*args):
-        start_time = time.time()
-        func(*args)
-        print(str(func), "--- %s seconds ---" % (time.time() - start_time))
-
-    return inner
+def print_time():
+    now = datetime.now()
+    return now.strftime("%d/%m/%Y %H:%M:%S")
 
 
-def print_time(start_time=None):
+def print_process_time(start_time=None):
     if start_time:
-        str = "--- %s seconds ---" % (time.time() - start_time)
+        str = "--- %s seconds ---" % timedelta(seconds = time.time() - start_time)
         return str
 
     else:
@@ -150,3 +144,39 @@ def libstyle_nuclide_expression(elem, mass):
 def round_half_up(n, decimals=0):
     multiplier = 10**decimals
     return math.floor(n * multiplier + 0.5) / multiplier
+
+def correct_pub_year(yearstr):
+
+    if len(yearstr) == 2:
+        return "19" + yearstr
+
+    elif len(yearstr) == 4:
+        if yearstr.startswith("20") or yearstr.startswith("19"):
+            ## 1960 or 2020
+            return yearstr
+
+        elif not yearstr.startswith("19"):
+            ### 8811
+            return "19" + yearstr[0:2]
+
+    elif len(yearstr) == 6:
+        if yearstr.startswith("20"):
+            ### 200109
+            return yearstr[0:4]
+
+        elif yearstr.startswith("19"):
+            ###  196809
+            return yearstr[0:4]
+
+        elif not yearstr.startswith("19") and not yearstr.startswith("20"):
+            ###  680901, most of the case it could be 19s
+            return "19" + yearstr[0:2]
+
+    elif len(yearstr) == 8:
+        ### 20001120
+        return yearstr[0:4]
+
+    else:
+        ## Just in case
+        return yearstr
+

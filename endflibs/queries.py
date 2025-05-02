@@ -1,6 +1,6 @@
 import pandas as pd
 
-from config import session_lib, engines
+from ...config import session_lib, engines
 from endftables_sql.models import (
     Endf_Reactions,
     Endf_XS_Data,
@@ -9,7 +9,7 @@ from endftables_sql.models import (
     Endf_N_Residual_Data,
     Endf_FY_Data,
 )
-from submodules.utilities.util import libstyle_nuclide_expression
+from ..utilities.util import libstyle_nuclide_expression
 
 connection = engines["endftables"].connect()
 
@@ -32,14 +32,10 @@ def lib_query(input_store):
     if type == "XS" or type == "DA" or type == "FY" or type == "TH":
         mt = input_store.get("mt")
         queries.append(
-            Endf_Reactions.mt == mt  # .zfill(3)
+            Endf_Reactions.mt == mt.zfill(3)
         )  # if mt is not None else Endf_Reactions.mt is not None)
         if type == "TH":
             type = "XS"
-        if type == "DA":
-            type = "angle"
-        elif type == "DE":
-            type = "energy"
 
     elif type == "RP":
         type = "residual"
@@ -47,6 +43,14 @@ def lib_query(input_store):
         rp_mass = input_store.get("rp_mass")
         residual = libstyle_nuclide_expression(rp_elem, rp_mass)
         queries.append(Endf_Reactions.residual == residual)
+
+    elif type == "DA":
+        type == "angle"
+        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
+
+    elif type == "DE":
+        type == "energy"
+        queries.append(Endf_Reactions.process == reaction.split(",")[1].upper())
 
     queries.append(Endf_Reactions.type == type.lower())
 
@@ -56,7 +60,9 @@ def lib_query(input_store):
     for r in reac:
         libs[r.reaction_id] = r.evaluation
 
+
     return libs
+
 
 
 def lib_residual_nuclide_list(elem, mass, inc_pt):
@@ -75,25 +81,25 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
         return [d[0] for d in data]
 
 
+
 def lib_data_query(input_store, ids):
     type = input_store["type"].upper()
 
     if type == "XS":
         return lib_xs_data_query(ids)
-
+    
     elif type == "TH":
         return lib_th_data_query(ids)
-
+    
     elif type == "FY":
         return lib_fy_data_query(ids)
-
+    
     elif type == "DA":
         return lib_da_data_query(ids)
-
+    
     elif type == "RP":
-        return lib_residual_data_query(
-            input_store["reaction"].split(",")[0].lower(), ids
-        )
+        return lib_residual_data_query(input_store["reaction"].split(",")[0].lower(), ids)
+
 
 
 def lib_xs_data_query(ids):
@@ -111,11 +117,16 @@ def lib_xs_data_query(ids):
     return df
 
 
+
 def lib_th_data_query(ids):
-    queries = [Endf_XS_Data.reaction_id.in_(tuple(ids))]
-    queries.append(Endf_XS_Data.en_inc >= 2.52e-8)
-    queries.append(Endf_XS_Data.en_inc <= 2.54e-8)
-    data = session_lib().query(Endf_XS_Data).filter(*queries)
+    queries = [ Endf_XS_Data.reaction_id.in_(tuple(ids)) ]
+    queries.append(Endf_XS_Data.en_inc >= 2.52E-8)
+    queries.append(Endf_XS_Data.en_inc <= 2.54E-8)
+    data = (
+        session_lib()
+        .query(Endf_XS_Data)
+        .filter(*queries)
+    )
 
     df = pd.read_sql(
         sql=data.statement,
