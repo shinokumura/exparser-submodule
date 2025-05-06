@@ -20,6 +20,9 @@ from datetime import datetime, timedelta
 from .elem import elemtoz_nz
 
 
+def closest(nums, val):
+     return nums[min(range(len(nums)), key = lambda i: abs(nums[i]-val))]
+
 def slices(s, *args):
     position = 0
     for length in args:
