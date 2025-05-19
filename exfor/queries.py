@@ -1,10 +1,18 @@
+import sys
+import importlib
 import pandas as pd
 from collections import OrderedDict
 from operator import getitem
 from sqlalchemy import func
 
 
-from ...config import engines, session
+try:
+    from config import  engines
+except:
+    module_name =  sys.modules[__name__].split(".")[0]
+    config = importlib.import_module(f"{module_name}.config")
+    from config import  engines, session
+
 from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
 
 from ..utilities.util import elemtoz_nz

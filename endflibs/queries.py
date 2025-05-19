@@ -1,7 +1,16 @@
+import sys
+import importlib
 import pandas as pd
 
-from ...config import session_lib, engines
-from src.endftables_sql.scripts.models import (
+try:
+    from config import session_lib, engines
+except:
+    module_name =  sys.modules[__name__].split(".")[0]
+    config = importlib.import_module(f"{module_name}.config")
+    from config import session_lib, engines
+
+
+from endftables_sql.models import (
     Endf_Reactions,
     Endf_XS_Data,
     Endf_Angle_Data,
@@ -139,8 +148,8 @@ def lib_th_data_query(ids):
 def lib_da_data_query(ids):
     data = (
         session_lib()
-        .query(Endf_ANGLE_Data)
-        .filter(Endf_ANGLE_Data.reaction_id.in_(tuple(ids)))
+        .query(Endf_Angle_Data)
+        .filter(Endf_Angle_Data.reaction_id.in_(tuple(ids)))
     )
 
     df = pd.read_sql(
