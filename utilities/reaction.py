@@ -14,6 +14,7 @@ from .util import get_str_from_string
 
 
 ## Previous mf3.json in MT_PATH_JSON
+## SF3 in EXFOR reaction code mapping to MT number
 sf3_dict = {
     "TOT": {"mt": "1", "reaction": "(n,total)", "sf5-8": None},
     "EL": {"mt": "2", "reaction": "(n,elas.)", "sf5-8": None},
@@ -115,30 +116,18 @@ sf3_dict = {
     "N+3P": {"mt": "198", "reaction": "(n,n'3p)", "sf5-8": None},
     "3N+2P+A": {"mt": "199", "reaction": "(n,3n2pa)", "sf5-8": None},
     "5N+2P": {"mt": "200", "reaction": "(n,5n2p)", "sf5-8": None},
-    "X": {"mt": "10", "reaction": "(n,contin.)", "sf5-8": "CON,SIG"},
 }
+
 
 mt_range = {
-    "N": list(range(50, 92)),
-    "P": list(range(600, 649)),
-    "D": list(range(650, 699)),
-    "T": list(range(700, 749)),
-    "H": list(range(750, 799)),
-    "A": list(range(800, 849)),
-    "G": list(range(102)),
-}
-
-
-
-resid_mt_range = {
-    "N": list(range(50, 90)),
-    "P": list(range(600, 649)),
-    "D": list(range(650, 699)),
-    "T": list(range(700, 749)),
-    "H": list(range(750, 799)),
-    "A": list(range(800, 849)),
-    "G": [102],
-}  # not sure about photon induced case
+    "N": list(range(50, 93)), # up to 92
+    "P": list(range(600, 650)), # up to 649
+    "D": list(range(650, 700)), # up to 699
+    "T": list(range(700, 750)), # up to 749
+    "H": list(range(750, 800)), # up to 799
+    "A": list(range(800, 850)), # up to 849
+    "G": [102], 
+} # not sure about photon induced case
 
 
 
@@ -248,15 +237,15 @@ mt_list = {
     "205": "Xt",
     "206": "Xh",
     "207": "Xa",
-    "451": "Descriptive Data and Directory",
-    "452": "nu_bar_t average total number of neutrons",
-    "454": "Independent fission product yield data",
-    "455": "nu_bar_d average number of delayed neutrons",
-    "456": "nu_bar_p average number of prompt neutron",
-    "457": "Radioactive decay data",
-    "458": "Energy release in fission for incident neutrons",
-    "459": "Cumulative fission product yield data",
-    "460": "Delayed Photon Data",
+    # "451": "Descriptive Data and Directory",
+    # "452": "nu_bar_t average total number of neutrons",
+    # "454": "Independent fission product yield data",
+    # "455": "nu_bar_d average number of delayed neutrons",
+    # "456": "nu_bar_p average number of prompt neutron",
+    # "457": "Radioactive decay data",
+    # "458": "Energy release in fission for incident neutrons",
+    # "459": "Cumulative fission product yield data",
+    # "460": "Delayed Photon Data",
 }
 
 ## The allowed SF5 for SIG data
@@ -350,6 +339,7 @@ def fy_branch(branch):
         return [branch]
 
 
+
 def reaction_list(projectile):
     if not projectile:
         return sf3_dict
@@ -369,10 +359,10 @@ def reaction_list(projectile):
     }
     partial = {}
 
-    for p in resid_mt_range.keys():
-        for n in range(len(resid_mt_range[p.upper()])):
+    for p in mt_range.keys():
+        for n in range(len(mt_range[p.upper()])):
             partial[f"{p.upper()}{str(n)}"] = {
-                "mt": str(resid_mt_range[p.upper()][n]),
+                "mt": str(mt_range[p.upper()][n]),
                 "reaction": f"({projectile.lower()},{p.lower()}{str(n)}",
                 "sf5-8": "PAR,SIG,,",
             }
@@ -402,9 +392,11 @@ def exfor_reaction_list(projectile):
     return all
 
 
+
 def get_mt(reac):
     reactions = reaction_list(reac.split(",")[0].upper())
     return reactions[reac.split(",")[1].upper()]["mt"]
+
 
 
 def convert_partial_reactionstr_to_inl(reaction):
@@ -418,12 +410,15 @@ def convert_partial_reactionstr_to_inl(reaction):
         return get_str_from_string(reaction).upper()
 
 
+
 def convert_reaction_to_exfor_style(reaction):
     if reaction.split(",")[0].upper() == "H":
         ## incident "h" --> "HE3"
         reaction = f"HE3,{reaction.split(',')[1].upper()}"
 
     return reaction
+
+
 
 def generate_mt_list(projectile):
     all = {}
@@ -438,10 +433,10 @@ def generate_mt_list(projectile):
         }
         partial = {}
 
-        for p in resid_mt_range.keys():
-            for n in range(len(resid_mt_range[p.upper()])):
+        for p in mt_range.keys():
+            for n in range(len(mt_range[p.upper()])):
                 partial[
-                    str(resid_mt_range[p.upper()][n])
+                    str(mt_range[p.upper()][n])
                 ] = f"{projectile.lower()},{p.lower()}{str(n)}"
     # print(all, partial)
     return dict(**all, **partial)
@@ -462,6 +457,7 @@ def get_mf(react_dict):
 
     else:
         return 9999
+
 
 
 def get_mt(react_dict):
@@ -501,8 +497,9 @@ def get_mt(react_dict):
             )
 
 
+
 def e_lvl_to_mt(level_num, process):
-    ## This is definition of outgoing particle
+    ## This is a definition of outgoing particle
     ## N,INL = 4
     ## N,G = 102
     ## N,P = 103  --> N,P or P,P to the excitation states are MT=600-649
@@ -513,7 +510,6 @@ def e_lvl_to_mt(level_num, process):
     
     if out_part == "INL":
         out_part = inc_part
-
 
     if level_num is None:
         return None 
@@ -526,3 +522,32 @@ def e_lvl_to_mt(level_num, process):
 
     else:
         return max(mt_range[out_part])
+    
+
+def mt_to_process(projectile, type, mt):
+    if type == "residual":
+        return "X"
+    
+    if mt and int(mt) == 4 and projectile == "n":
+        return "INL"
+    
+    elif mt and int(mt) == 4 and projectile != "n":
+        return "N"
+    
+    elif mt and mt_list.get(str(int(mt))):
+        return mt_list[str(int(mt))]
+    
+    else:
+        mt_to_discretelevel(mt)
+
+
+def mt_to_discretelevel(mt):
+    for outpart, range in mt_range.items():
+        if int(mt) in range:
+            index = range.index(int(mt))
+            return f"{outpart}{str(index)}"
+
+
+        
+
+

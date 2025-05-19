@@ -1,10 +1,10 @@
 import pandas as pd
 
 from ...config import session_lib, engines
-from endftables_sql.models import (
+from src.endftables_sql.scripts.models import (
     Endf_Reactions,
     Endf_XS_Data,
-    Endf_ANGLE_Data,
+    Endf_Angle_Data,
     Endf_Residual_Data,
     Endf_N_Residual_Data,
     Endf_FY_Data,
