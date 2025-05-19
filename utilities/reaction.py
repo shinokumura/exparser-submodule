@@ -460,7 +460,7 @@ def get_mf(react_dict):
 
 
 
-def get_mt(react_dict):
+def get_mt_non_xs(react_dict):
 
     if react_dict["sf6"] == "FY":
         return (
@@ -477,25 +477,6 @@ def get_mt(react_dict):
             and mt_nu_sf5[react_dict["sf5"]]["mt"]
             else None
         )
-
-    else:
-        if react_dict["process"] == "N,INL":
-            return 4
-
-        elif (
-            react_dict["process"].split(",")[0] != "N"
-            and react_dict["process"].split(",")[1] == "N"
-        ):
-            return 4
-
-        else:
-            return (
-                int(sf3_dict[react_dict["process"].split(",")[1]]["mt"])
-                if react_dict["process"]
-                and sf3_dict.get(react_dict["process"].split(",")[1])
-                else None
-            )
-
 
 
 def e_lvl_to_mt(level_num, process):
