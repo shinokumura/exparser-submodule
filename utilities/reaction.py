@@ -507,26 +507,26 @@ def e_lvl_to_mt(level_num, process):
 
 def mt_to_process(projectile, type, mt):
     if type == "residual":
-        return "X"
+        return "x"
     
     if mt and int(mt) == 4 and projectile == "n":
-        return "INL"
+        return "inelastic"
     
     elif mt and int(mt) == 4 and projectile != "n":
-        return "N"
+        return "n"
     
     elif mt and mt_list.get(str(int(mt))):
         return mt_list[str(int(mt))]
     
     else:
-        mt_to_discretelevel(mt)
+        return mt_to_discretelevel(mt)
 
 
 def mt_to_discretelevel(mt):
     for outpart, range in mt_range.items():
         if int(mt) in range:
             index = range.index(int(mt))
-            return f"{outpart}{str(index)}"
+            return f"{outpart.lower()}_{str(index)}"
 
 
         

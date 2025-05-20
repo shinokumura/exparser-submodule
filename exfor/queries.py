@@ -7,11 +7,11 @@ from sqlalchemy import func
 
 
 try:
-    from config import  engines
+    from config import  engines, session
 except:
     module_name =  sys.modules[__name__].split(".")[0]
     config = importlib.import_module(f"{module_name}.config")
-    from config import  engines, session
+    from config import engines, session
 
 from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
 
