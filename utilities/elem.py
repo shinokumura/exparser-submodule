@@ -172,7 +172,6 @@ def elemtoz_nz(elem):
     return z
 
 
-
 def numtoisomer(num):
     if num == "0":
         return "G"
