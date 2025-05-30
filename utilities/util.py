@@ -11,6 +11,7 @@
 ####################################################################
 
 import re
+import re
 import os
 import shutil
 import time
@@ -24,11 +25,30 @@ def closest(nums, val):
     return nums[min(range(len(nums)), key=lambda i: abs(nums[i] - val))]
 
 
+def closest(nums, val):
+     return nums[min(range(len(nums)), key = lambda i: abs(nums[i]-val))]
+
 def slices(s, *args):
     position = 0
     for length in args:
         yield s[position : position + length]
         position += length
+
+
+def get_number_from_string(x):
+    return re.sub(r"\D+", "", x)
+
+
+def get_str_from_string(x):
+    return re.sub(r"\d+", "", str(x))
+
+
+def split_by_number(x) -> list:
+    ## retrun list for e.g.
+    # ['Br', '077', '']
+    # ['Br', '077', 'g']
+    # ['Br', '077', 'm']
+    return re.split(r"(\d+)", x)
 
 
 def get_number_from_string(x):
