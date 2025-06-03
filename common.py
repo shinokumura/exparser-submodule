@@ -46,6 +46,16 @@ LIB_LIST_MAX = [
 ]
 LIB_LIST_MAX.sort(reverse=True)
 
+pageparam_to_sf6 = {
+    "XS": "SIG", 
+    "TH": "SIG", 
+    "RP": "SIG", 
+    "FY": "FY", 
+    "DA": "DA",
+    "DE": "DE",
+    "TRN": "TRN",
+}
+
 
 def generate_exfortables_file_path(input_store):
     type = input_store.get("type").upper()
