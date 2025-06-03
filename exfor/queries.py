@@ -46,7 +46,7 @@ def get_exfor_bib_table():
 
 def get_exfor_reference_table():
     with engines["exfor"].connect() as connection:
-        df = pd.read_sql_table("exfor_reference", connection)
+        df = pd.read_sql_table("exfor_references", connection)
         return df
 
 
@@ -64,7 +64,7 @@ def get_exfor_reactions_table():
 
 def get_exfor_indexes_table():
     with engines["exfor"].connect() as connection:
-        df = pd.read_sql_table("exfor_index", connection)
+        df = pd.read_sql_table("exfor_indexes", connection)
         return df
 
 
