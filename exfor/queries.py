@@ -325,7 +325,7 @@ def exfor_index_query(input_store) -> dict:
     # Excute query
     queries.append(exfor_indexes.c.sf6 == sf6.upper())
     stmt = select(exfor_indexes).where(and_(*queries))
-    print(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
+    # print(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
     with engines["exfor"].connect() as conn:
         result = conn.execute(stmt).fetchall()
 

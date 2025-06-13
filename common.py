@@ -32,9 +32,9 @@ def open_json(file):
 LIB_LIST_MAX = [
     "tendl.2023",
     # "tendl.2021",
-    "endfb8.0",
-    "eaf.2010", # European Activation File
-    "jeff3.3",
+    "endfb8.1",
+    "eaf.2010",  # European Activation File
+    "jeff4.0",
     "jendl5.0",
     # "jendl4.0",
     "iaea.2022",
@@ -45,6 +45,7 @@ LIB_LIST_MAX = [
     "ibandl",
 ]
 LIB_LIST_MAX.sort(reverse=True)
+
 
 pageparam_to_sf6 = {
     "XS": "SIG", 
@@ -57,8 +58,19 @@ pageparam_to_sf6 = {
 }
 
 
+pageparam_to_endftables_obs_type = {
+    "XS": "xs", 
+    "TH": "xs", 
+    "RP": "residual", 
+    "FY": "fission", 
+    "DA": "angle",
+    "DE": "energy",
+    "TRN": None,
+}
+
+
 def generate_exfortables_file_path(input_store):
-    type = input_store.get("type").upper()
+    obs_type = input_store.get("obs_type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     branch = input_store.get("branch")
@@ -66,11 +78,11 @@ def generate_exfortables_file_path(input_store):
     reaction = input_store.get("reaction")
     level_num = input_store.get("level_num")
 
-    target = f"{elem.capitalize()}-{str(int(mass))}"
+    target = f"{elem.capitalize()}-{str(mass)}"
     exfiles = []
 
-    if type == "TH":
-        type = "XS"
+    if obs_type == "TH":
+        obs_type = "XS"
 
     if level_num:
         reaction = convert_partial_reactionstr_to_inl(reaction)
@@ -79,10 +91,10 @@ def generate_exfortables_file_path(input_store):
             reaction.split(",")[0].lower(),
             target,
             reaction.replace(",", "-").lower() + "-L" + str(level_num),
-            type.lower(),
+            obs_type.lower(),
         )
 
-    elif type == "FY":
+    elif obs_type == "FY":
         fy_type = input_store.get("fy_type")
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
@@ -99,10 +111,10 @@ def generate_exfortables_file_path(input_store):
             reaction.split(",")[0].lower(),
             target,
             reaction.replace(",", "-").lower(),
-            type.lower() if type != "RP" else "xs",
+            obs_type.lower() if obs_type != "RP" else "xs",
         )
 
-    if type == "RP":
+    if obs_type == "RP":
         ## Format is "Ag-109-M"
         rp_elem = input_store.get("rp_elem")
         rp_mass = input_store.get("rp_mass")
@@ -134,20 +146,20 @@ def generate_endftables_file_path(input_store):
     """
     Generate the direct file links
     """
-    type = input_store.get("type").upper()
+    obs_type = input_store.get("obs_type").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
 
-    target = f"{elem.capitalize()}{str(int(mass)).zfill(3)}"
+    target = f"{elem.capitalize()}{str(mass).zfill(3)}"
 
-    if type == "TH":
-        type = "XS"
+    if obs_type == "TH":
+        obs_type = "XS"
 
     libfiles = []
     for lib in LIB_LIST_MAX:
-        if type == "FY":
+        if obs_type == "FY":
             dir = os.path.join(
                 ENDFTABLES_PATH,
                 "FY",
@@ -163,10 +175,10 @@ def generate_endftables_file_path(input_store):
                 target,
                 lib,
                 "tables",
-                type.lower() if type != "RP" else "residual",
+                obs_type.lower() if obs_type != "RP" else "residual",
             )
 
-        if type == "RP":
+        if obs_type == "RP":
             rp_elem = input_store.get("rp_elem")
             rp_mass = input_store.get("rp_mass")
 
@@ -184,6 +196,42 @@ def generate_endftables_file_path(input_store):
                 libfiles += [f for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
 
     return dir, libfiles
+
+
+def generate_single_endftables_file_path(input_store):
+    """
+    Generate the direct file links
+    """
+    obs_type = input_store.get("obs_type").upper()
+    projectile = input_store.get("projectile")
+    lib = input_store.get("evaluation")
+    mt = input_store.get("mt")
+    target = input_store.get("target")
+    libfiles = []
+    if obs_type == "FY":
+        dir = os.path.join(
+            ENDFTABLES_PATH,
+            "FY",
+            projectile.lower(),
+            target,
+            lib,
+            "tables/FY",
+        )
+    else:
+        dir = os.path.join(
+            ENDFTABLES_PATH,
+            projectile.lower(),
+            target,
+            lib,
+            "tables",
+            obs_type.lower(),
+        )
+
+    if os.path.exists(dir):
+        libfiles += [f for f in os.listdir(dir) if f"MT{str(mt).zfill(3)}" in f]
+
+    if libfiles:
+        return dir, libfiles[0]
 
 
 def generate_link_of_files(dir, files):
