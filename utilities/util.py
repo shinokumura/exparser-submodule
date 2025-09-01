@@ -11,7 +11,7 @@
 ####################################################################
 
 import re
-import re
+import numpy as np
 import os
 import shutil
 import time
@@ -155,6 +155,120 @@ def cos_to_angle_degrees(cos_value):
     radians = math.acos(cos_value) 
     degrees = math.degrees(radians)  
     return degrees
+
+
+def cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm):
+    gamma = v_cm / v_b_cm
+    theta_lab_rad = np.arctan2(np.sin(theta_cm_rad), gamma + np.cos(theta_cm_rad))
+    return theta_lab_rad
+
+
+def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
+     # === パラメータ設定 ===
+    m_a = 1.0  # projectile mass
+    m_A = 12.0  # target mass
+    E_lab = 10.0  # incident energy
+    m_b = 1.0  # outgoing particle mass
+    m_B = 12.0  # residual mass
+
+    # === kinetics ===
+    mu = (m_a * m_A) / (m_a + m_A)  # simplified reduced mass
+    v_a = np.sqrt(2 * E_lab / m_a)
+    v_cm = (m_a * v_a) / (m_a + m_A)
+    E_cm = mu * v_a**2 / 2
+    v_b_cm = np.sqrt(2 * E_cm / m_b)  # speed of b in CM
+
+    # === CM角度分布（等方） ===
+    theta_cm_deg = np.linspace(0, 180, 180)
+    theta_cm_rad = np.radians(theta_cm_deg)
+
+    # # === Lab角度変換 ===
+    # theta_lab_rad = cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm)
+    # theta_lab_deg = np.degrees(theta_lab_rad)
+    return theta_cm_rad
+
+
+
+def convert_angle(theta_values, input_system='CM', input_format='deg',
+                  output_format='deg', gamma=0.5):
+    """
+    簡易的な角度変換関数（CM <-> Lab, degree <-> cosine 対応）
+
+    Parameters:
+    - theta_values: np.ndarray or list
+        入力角度（degreeまたはcos(theta)）
+    - input_system: 'CM' or 'Lab'
+        入力の座標系
+    - input_format: 'deg' or 'cos'
+        入力角度の形式
+    - output_format: 'deg' or 'cos'
+        出力角度の形式
+    - gamma: float
+        v_CM / v_b_CM の速度比（反応により変える）
+
+    Returns:
+    - 変換後の角度（degreeまたはcos形式）
+    """
+    theta_values = np.array(theta_values)
+
+    # 1. 入力を cos(theta_cm) に変換
+    if input_format == 'deg':
+        theta_rad = np.radians(theta_values)
+        cos_input = np.cos(theta_rad)
+    elif input_format == 'cos':
+        cos_input = theta_values
+    else:
+        raise ValueError("input_format must be 'deg' or 'cos'")
+
+    # 2. 座標系変換
+    if input_system == 'CM':
+        # CM → Lab
+        cos_out = (cos_input + gamma) / (1 + gamma * cos_input)
+    elif input_system == 'Lab':
+        # Lab → CM（逆変換）
+        cos_out = (cos_input - gamma) / (1 - gamma * cos_input)
+    else:
+        raise ValueError("input_system must be 'CM' or 'Lab'")
+
+    # 3. 出力形式変換
+    if output_format == 'cos':
+        return cos_out
+    elif output_format == 'deg':
+        theta_out = np.degrees(np.arccos(cos_out))
+        return theta_out
+    else:
+        raise ValueError("output_format must be 'deg' or 'cos'")
+
+
+def convert_angle_cm_lab(theta_deg, direction='CM_to_LAB', gamma=0.5):
+    """
+    角度（degree）を CM ↔ LAB 間で変換する関数（非相対論的近似）
+
+    Parameters:
+    - theta_deg : array-like
+        入力角度（単位：degree、CMまたはLAB系）
+    - direction : str
+        'CM_to_LAB' または 'LAB_to_CM'
+    - gamma : float
+        v_CM / v_b_CM の速度比（反応によって決まる）
+
+    Returns:
+    - theta_out_deg : np.ndarray
+        変換後の角度（degree）
+    """
+    theta_rad = np.radians(theta_deg)
+    cos_theta = np.cos(theta_rad)
+
+    if direction == 'CM_to_LAB':
+        cos_lab = (cos_theta + gamma) / (1 + gamma * cos_theta)
+        theta_out_rad = np.arccos(cos_lab)
+    elif direction == 'LAB_to_CM':
+        cos_cm = (cos_theta - gamma) / (1 - gamma * cos_theta)
+        theta_out_rad = np.arccos(cos_cm)
+    else:
+        raise ValueError("direction must be 'CM_to_LAB' or 'LAB_to_CM'")
+
+    return np.degrees(theta_out_rad)
 
 
 

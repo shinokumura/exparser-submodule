@@ -16,6 +16,10 @@ from .util import get_str_from_string
 ## Previous mf3.json in MT_PATH_JSON
 ## SF3 in EXFOR reaction code mapping to MT number
 sf3_dict = {
+    "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None},
+    "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None},
+    "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None},
+    "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG"},
     "TOT": {"mt": "1", "reaction": "(n,total)", "sf5-8": None},
     "EL": {"mt": "2", "reaction": "(n,elas.)", "sf5-8": None},
     "NON": {"mt": "3", "reaction": "(n,nonelas.)", "sf5-8": None},
@@ -295,7 +299,7 @@ MT_BRANCH_LIST_FY = {
 }
 
 
-sf_to_mf = {
+sf6_to_mf = {
     "NU": "1",
     "WID": "2",
     "ARE": "2",
@@ -389,9 +393,32 @@ def exfor_reaction_list(projectile):
     return all
 
 
-def get_mt(reac):
-    reactions = reaction_list(reac.split(",")[0].upper())
-    return reactions[reac.split(",")[1].upper()]["mt"]
+def get_mf(react_dict):
+
+    if sf6_to_mf.get(react_dict["sf6"]):
+        if react_dict["sf6"] == "NU":
+            return int(sf6_to_mf[react_dict["sf6"]])
+
+        elif react_dict["sf4"] == "0-G-0":
+            return 12  # Multiplicity of photon production
+
+        else:
+            return int(sf6_to_mf[react_dict["sf6"]])
+
+    else:
+        return 9999
+
+
+
+def get_mt(react_dict):
+    particle = react_dict["process"].split(",")[0].upper()
+    if particle == "HE3":
+        particle = "H"
+    try:
+        reactions = reaction_list( particle )
+        return reactions[ react_dict["process"].split(",")[1].upper() ]["mt"]
+    except:
+        return None
 
 
 def convert_partial_reactionstr_to_inl(reaction):
@@ -434,21 +461,6 @@ def generate_mt_list(projectile):
     # print(all, partial)
     return dict(**all, **partial)
 
-
-def get_mf(react_dict):
-
-    if sf_to_mf.get(react_dict["sf6"]):
-        if react_dict["sf6"] == "NU":
-            return int(sf_to_mf[react_dict["sf6"]])
-
-        elif react_dict["sf4"] == "0-G-0":
-            return 12  # Multiplicity of photon production
-
-        else:
-            return int(sf_to_mf[react_dict["sf6"]])
-
-    else:
-        return 9999
 
 
 def get_mt_non_xs(react_dict):
