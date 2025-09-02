@@ -15,111 +15,121 @@ from .util import get_str_from_string
 
 ## Previous mf3.json in MT_PATH_JSON
 ## SF3 in EXFOR reaction code mapping to MT number
+## temp = {    "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None},
+# "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None},
+# "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None},
+# "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG"},}
+
+exfor_sf3_dict = {
+
+}
+
+
 sf3_dict = {
-    "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None},
-    "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None},
-    "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None},
-    "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG"},
-    "TOT": {"mt": "1", "reaction": "(n,total)", "sf5-8": None},
-    "EL": {"mt": "2", "reaction": "(n,elas.)", "sf5-8": None},
-    "NON": {"mt": "3", "reaction": "(n,nonelas.)", "sf5-8": None},
-    "INL": {"mt": "4", "reaction": "(n,inelas.)", "sf5-8": "SIG"},
-    "F": {"mt": "18", "reaction": "(n,f)", "sf5-8": None},
-    "G": {"mt": "102", "reaction": "(n,g)", "sf5-8": None},
-    "P": {"mt": "103", "reaction": "(n,p)", "sf5-8": None},
-    "D": {"mt": "104", "reaction": "(n,d)", "sf5-8": None},
-    "T": {"mt": "105", "reaction": "(n,t)", "sf5-8": None},
-    "HE3": {"mt": "106", "reaction": "(n,h)", "sf5-8": None},
-    "A": {"mt": "107", "reaction": "(n,a)", "sf5-8": None},
-    "ABS": {"mt": "27", "reaction": "(n,abs)", "sf5-8": None},
-    "2N": {"mt": "16", "reaction": "(n,2n)", "sf5-8": None},
-    "3N": {"mt": "17", "reaction": "(n,3n)", "sf5-8": None},
-    "FIS": {"mt": "19", "reaction": "(n,0f)", "sf5-8": "first"},
-    "N+F": {"mt": "20", "reaction": "(n,nf)", "sf5-8": "2nd"},
-    "2N+F": {"mt": "21", "reaction": "(n,2nf)", "sf5-8": "3rd"},
-    "3N+F": {"mt": "38", "reaction": "(n,3nf)", "sf5-8": "4th"},
-    "X+N": {"mt": "201", "reaction": "(n,Xn)", "sf5-8": None},
-    "X+G": {"mt": "202", "reaction": "(n,Xg)", "sf5-8": None},
-    "X+P": {"mt": "203", "reaction": "(n,Xp)", "sf5-8": None},
-    "X+D": {"mt": "205", "reaction": "(n,Xt)", "sf5-8": None},
-    "X+HE3": {"mt": "206", "reaction": "(n,Xh)", "sf5-8": None},
-    "X+A": {"mt": "207", "reaction": "(n,Xa)", "sf5-8": None},
-    "N+A": {"mt": "22", "reaction": "(n,na)", "sf5-8": None},
-    "N+3A": {"mt": "23", "reaction": "(n,n3a)", "sf5-8": None},
-    "N+P": {"mt": "28", "reaction": "(n,np)", "sf5-8": None},
-    "N+2A": {"mt": "29", "reaction": "(n,n2a)", "sf5-8": None},
-    "N+D": {"mt": "32", "reaction": "(n,nd)", "sf5-8": None},
-    "N+T": {"mt": "33", "reaction": "(n,nt)", "sf5-8": None},
-    "N+H": {"mt": "34", "reaction": "(n,nh)", "sf5-8": None},
-    "N+D+2A": {"mt": "35", "reaction": "(n,nd2a)", "sf5-8": None},
-    "N+T+2A": {"mt": "36", "reaction": "(n,nt2a)", "sf5-8": None},
-    "N+2P": {"mt": "44", "reaction": "(n,n2p)", "sf5-8": None},
-    "N+P+A": {"mt": "45", "reaction": "(n,npa)", "sf5-8": None},
-    "2N+A": {"mt": "24", "reaction": "(n,2na)", "sf5-8": None},
-    "2N+D": {"mt": "11", "reaction": "(n,2nd)", "sf5-8": None},
-    "2N+2A": {"mt": "30", "reaction": "(n,2n2a)", "sf5-8": None},
-    "2N+P": {"mt": "41", "reaction": "(n,2np)", "sf5-8": None},
-    "2N+T": {"mt": "154", "reaction": "(n,2nt)", "sf5-8": None},
-    "2N+2P": {"mt": "190", "reaction": "(n,2n2p)", "sf5-8": None},
-    "2N+P+A": {"mt": "159", "reaction": "(n,2npa)", "sf5-8": None},
-    "3N+A": {"mt": "25", "reaction": "(n,3na)", "sf5-8": None},
-    "3N+P": {"mt": "42", "reaction": "(n,3np)", "sf5-8": None},
-    "3N+D": {"mt": "157", "reaction": "(n,3nd)", "sf5-8": None},
-    "2A": {"mt": "108", "reaction": "(n,2a)", "sf5-8": None},
-    "3A": {"mt": "109", "reaction": "(n,3a)", "sf5-8": None},
-    "2P": {"mt": "111", "reaction": "(n,2p)", "sf5-8": None},
-    "P+A": {"mt": "112", "reaction": "(n,pa)", "sf5-8": None},
-    "T+2A": {"mt": "113", "reaction": "(n,t2a)", "sf5-8": None},
-    "D+2A": {"mt": "114", "reaction": "(n,d2a)", "sf5-8": None},
-    "P+D": {"mt": "115", "reaction": "(n,pd)", "sf5-8": None},
-    "P+T": {"mt": "116", "reaction": "(n,pt)", "sf5-8": None},
-    "D+A": {"mt": "117", "reaction": "(n,da)", "sf5-8": None},
-    "4N": {"mt": "37", "reaction": "(n,4n)", "sf5-8": None},
-    "4N+P": {"mt": "156", "reaction": "(n,4np)", "sf5-8": None},
-    "5N": {"mt": "152", "reaction": "(n,5n)", "sf5-8": None},
-    "6N": {"mt": "153", "reaction": "(n,6n)", "sf5-8": None},
-    "T+A": {"mt": "155", "reaction": "(n,ta)", "sf5-8": None},
-    "N+D+A": {"mt": "158", "reaction": "(n,n'da)", "sf5-8": None},
-    "7N": {"mt": "160", "reaction": "(n,7n)", "sf5-8": None},
-    "8N": {"mt": "161", "reaction": "(n,8n)", "sf5-8": None},
-    "5N+P": {"mt": "162", "reaction": "(n,5np)", "sf5-8": None},
-    "6N+P": {"mt": "163", "reaction": "(n,6np)", "sf5-8": None},
-    "7N+P": {"mt": "164", "reaction": "(n,7np)", "sf5-8": None},
-    "4N+A": {"mt": "165", "reaction": "(n,4na)", "sf5-8": None},
-    "5N+A": {"mt": "166", "reaction": "(n,5na)", "sf5-8": None},
-    "6N+A": {"mt": "167", "reaction": "(n,6na)", "sf5-8": None},
-    "7N+A": {"mt": "168", "reaction": "(n,7na)", "sf5-8": None},
-    "4N+D": {"mt": "169", "reaction": "(n,4nd)", "sf5-8": None},
-    "5N+D": {"mt": "170", "reaction": "(n,5nd)", "sf5-8": None},
-    "6N+D": {"mt": "171", "reaction": "(n,6nd)", "sf5-8": None},
-    "3N+T": {"mt": "172", "reaction": "(n,3nt)", "sf5-8": None},
-    "4N+T": {"mt": "173", "reaction": "(n,4nt)", "sf5-8": None},
-    "5N+T": {"mt": "174", "reaction": "(n,5nt)", "sf5-8": None},
-    "6N+T": {"mt": "175", "reaction": "(n,6nt)", "sf5-8": None},
-    "2N+HE3": {"mt": "176", "reaction": "(n,2nh)", "sf5-8": None},
-    "3N+HE3": {"mt": "177", "reaction": "(n,3nh)", "sf5-8": None},
-    "4N+HE3": {"mt": "178", "reaction": "(n,4nh)", "sf5-8": None},
-    "3N+2P": {"mt": "179", "reaction": "(n,3n2p)", "sf5-8": None},
-    "3N+2": {"mt": "180", "reaction": "(n,3n2a)", "sf5-8": None},
-    "3N+P+A": {"mt": "181", "reaction": "(n,3npa)", "sf5-8": None},
-    "D+T": {"mt": "182", "reaction": "(n,dt)", "sf5-8": None},
-    "N+P+D": {"mt": "183", "reaction": "(n,n'pd)", "sf5-8": None},
-    "N+P+T": {"mt": "184", "reaction": "(n,n'pt)", "sf5-8": None},
-    "N+D+T": {"mt": "185", "reaction": "(n,n'dt)", "sf5-8": None},
-    "N+P+HE3": {"mt": "186", "reaction": "(n,n'ph)", "sf5-8": None},
-    "N+D+HE3": {"mt": "187", "reaction": "(n,n'dh)", "sf5-8": None},
-    "N+T+HE3": {"mt": "188", "reaction": "(n,n'th)", "sf5-8": None},
-    "N+T+A": {"mt": "189", "reaction": "(n,n'ta)", "sf5-8": None},
-    "P+HE3": {"mt": "191", "reaction": "(n,ph)", "sf5-8": None},
-    "D+HE": {"mt": "192", "reaction": "(n,dh)", "sf5-8": None},
-    "HE+A": {"mt": "193", "reaction": "(n,ha)", "sf5-8": None},
-    "4N+2P": {"mt": "194", "reaction": "(n,4n2p)", "sf5-8": None},
-    "4N+2A": {"mt": "195", "reaction": "(n,4n2a)", "sf5-8": None},
-    "4N+P+A": {"mt": "196", "reaction": "(n,4npa)", "sf5-8": None},
-    "3P": {"mt": "197", "reaction": "(n,3p)", "sf5-8": None},
-    "N+3P": {"mt": "198", "reaction": "(n,n'3p)", "sf5-8": None},
-    "3N+2P+A": {"mt": "199", "reaction": "(n,3n2pa)", "sf5-8": None},
-    "5N+2P": {"mt": "200", "reaction": "(n,5n2p)", "sf5-8": None},
+    "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None, "endf": False},
+    "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None, "endf": False},
+    "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None, "endf": False},
+    "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG", "endf": False},
+    "TOT": {"mt": "1", "reaction": "(n,total)", "sf5-8": None, "endf": True},
+    "EL": {"mt": "2", "reaction": "(n,elas.)", "sf5-8": None, "endf": True},
+    "NON": {"mt": "3", "reaction": "(n,nonelas.)", "sf5-8": None, "endf": True},
+    "INL": {"mt": "4", "reaction": "(n,inelas.)", "sf5-8": "SIG", "endf": True},
+    "F": {"mt": "18", "reaction": "(n,f)", "sf5-8": None, "endf": True},
+    "G": {"mt": "102", "reaction": "(n,g)", "sf5-8": None, "endf": True},
+    "P": {"mt": "103", "reaction": "(n,p)", "sf5-8": None, "endf": True},
+    "D": {"mt": "104", "reaction": "(n,d)", "sf5-8": None, "endf": True},
+    "T": {"mt": "105", "reaction": "(n,t)", "sf5-8": None, "endf": True},
+    "HE3": {"mt": "106", "reaction": "(n,h)", "sf5-8": None, "endf": True},
+    "A": {"mt": "107", "reaction": "(n,a)", "sf5-8": None, "endf": True},
+    "ABS": {"mt": "27", "reaction": "(n,abs)", "sf5-8": None, "endf": True},
+    "2N": {"mt": "16", "reaction": "(n,2n)", "sf5-8": None, "endf": True},
+    "3N": {"mt": "17", "reaction": "(n,3n)", "sf5-8": None, "endf": True},
+    "FIS": {"mt": "19", "reaction": "(n,0f)", "sf5-8": "first", "endf": True},
+    "N+F": {"mt": "20", "reaction": "(n,nf)", "sf5-8": "2nd", "endf": True},
+    "2N+F": {"mt": "21", "reaction": "(n,2nf)", "sf5-8": "3rd", "endf": True},
+    "3N+F": {"mt": "38", "reaction": "(n,3nf)", "sf5-8": "4th", "endf": True},
+    "X+N": {"mt": "201", "reaction": "(n,Xn)", "sf5-8": None, "endf": True},
+    "X+G": {"mt": "202", "reaction": "(n,Xg)", "sf5-8": None, "endf": True},
+    "X+P": {"mt": "203", "reaction": "(n,Xp)", "sf5-8": None, "endf": True},
+    "X+D": {"mt": "205", "reaction": "(n,Xt)", "sf5-8": None, "endf": True},
+    "X+HE3": {"mt": "206", "reaction": "(n,Xh)", "sf5-8": None, "endf": True},
+    "X+A": {"mt": "207", "reaction": "(n,Xa)", "sf5-8": None, "endf": True},
+    "N+A": {"mt": "22", "reaction": "(n,na)", "sf5-8": None, "endf": True},
+    "N+3A": {"mt": "23", "reaction": "(n,n3a)", "sf5-8": None, "endf": True},
+    "N+P": {"mt": "28", "reaction": "(n,np)", "sf5-8": None, "endf": True},
+    "N+2A": {"mt": "29", "reaction": "(n,n2a)", "sf5-8": None, "endf": True},
+    "N+D": {"mt": "32", "reaction": "(n,nd)", "sf5-8": None, "endf": True},
+    "N+T": {"mt": "33", "reaction": "(n,nt)", "sf5-8": None, "endf": True},
+    "N+H": {"mt": "34", "reaction": "(n,nh)", "sf5-8": None, "endf": True},
+    "N+D+2A": {"mt": "35", "reaction": "(n,nd2a)", "sf5-8": None, "endf": True},
+    "N+T+2A": {"mt": "36", "reaction": "(n,nt2a)", "sf5-8": None, "endf": True},
+    "N+2P": {"mt": "44", "reaction": "(n,n2p)", "sf5-8": None, "endf": True},
+    "N+P+A": {"mt": "45", "reaction": "(n,npa)", "sf5-8": None, "endf": True},
+    "2N+A": {"mt": "24", "reaction": "(n,2na)", "sf5-8": None, "endf": True},
+    "2N+D": {"mt": "11", "reaction": "(n,2nd)", "sf5-8": None, "endf": True},
+    "2N+2A": {"mt": "30", "reaction": "(n,2n2a)", "sf5-8": None, "endf": True},
+    "2N+P": {"mt": "41", "reaction": "(n,2np)", "sf5-8": None, "endf": True},
+    "2N+T": {"mt": "154", "reaction": "(n,2nt)", "sf5-8": None, "endf": True},
+    "2N+2P": {"mt": "190", "reaction": "(n,2n2p)", "sf5-8": None, "endf": True},
+    "2N+P+A": {"mt": "159", "reaction": "(n,2npa)", "sf5-8": None, "endf": True},
+    "3N+A": {"mt": "25", "reaction": "(n,3na)", "sf5-8": None, "endf": True},
+    "3N+P": {"mt": "42", "reaction": "(n,3np)", "sf5-8": None, "endf": True},
+    "3N+D": {"mt": "157", "reaction": "(n,3nd)", "sf5-8": None, "endf": True},
+    "2A": {"mt": "108", "reaction": "(n,2a)", "sf5-8": None, "endf": True},
+    "3A": {"mt": "109", "reaction": "(n,3a)", "sf5-8": None, "endf": True},
+    "2P": {"mt": "111", "reaction": "(n,2p)", "sf5-8": None, "endf": True},
+    "P+A": {"mt": "112", "reaction": "(n,pa)", "sf5-8": None, "endf": True},
+    "T+2A": {"mt": "113", "reaction": "(n,t2a)", "sf5-8": None, "endf": True},
+    "D+2A": {"mt": "114", "reaction": "(n,d2a)", "sf5-8": None, "endf": True},
+    "P+D": {"mt": "115", "reaction": "(n,pd)", "sf5-8": None, "endf": True},
+    "P+T": {"mt": "116", "reaction": "(n,pt)", "sf5-8": None, "endf": True},
+    "D+A": {"mt": "117", "reaction": "(n,da)", "sf5-8": None, "endf": True},
+    "4N": {"mt": "37", "reaction": "(n,4n)", "sf5-8": None, "endf": True},
+    "4N+P": {"mt": "156", "reaction": "(n,4np)", "sf5-8": None, "endf": True},
+    "5N": {"mt": "152", "reaction": "(n,5n)", "sf5-8": None, "endf": True},
+    "6N": {"mt": "153", "reaction": "(n,6n)", "sf5-8": None, "endf": True},
+    "T+A": {"mt": "155", "reaction": "(n,ta)", "sf5-8": None, "endf": True},
+    "N+D+A": {"mt": "158", "reaction": "(n,n'da)", "sf5-8": None, "endf": True},
+    "7N": {"mt": "160", "reaction": "(n,7n)", "sf5-8": None, "endf": True},
+    "8N": {"mt": "161", "reaction": "(n,8n)", "sf5-8": None, "endf": True},
+    "5N+P": {"mt": "162", "reaction": "(n,5np)", "sf5-8": None, "endf": True},
+    "6N+P": {"mt": "163", "reaction": "(n,6np)", "sf5-8": None, "endf": True},
+    "7N+P": {"mt": "164", "reaction": "(n,7np)", "sf5-8": None, "endf": True},
+    "4N+A": {"mt": "165", "reaction": "(n,4na)", "sf5-8": None, "endf": True},
+    "5N+A": {"mt": "166", "reaction": "(n,5na)", "sf5-8": None, "endf": True},
+    "6N+A": {"mt": "167", "reaction": "(n,6na)", "sf5-8": None, "endf": True},
+    "7N+A": {"mt": "168", "reaction": "(n,7na)", "sf5-8": None, "endf": True},
+    "4N+D": {"mt": "169", "reaction": "(n,4nd)", "sf5-8": None, "endf": True},
+    "5N+D": {"mt": "170", "reaction": "(n,5nd)", "sf5-8": None, "endf": True},
+    "6N+D": {"mt": "171", "reaction": "(n,6nd)", "sf5-8": None, "endf": True},
+    "3N+T": {"mt": "172", "reaction": "(n,3nt)", "sf5-8": None, "endf": True},
+    "4N+T": {"mt": "173", "reaction": "(n,4nt)", "sf5-8": None, "endf": True},
+    "5N+T": {"mt": "174", "reaction": "(n,5nt)", "sf5-8": None, "endf": True},
+    "6N+T": {"mt": "175", "reaction": "(n,6nt)", "sf5-8": None, "endf": True},
+    "2N+HE3": {"mt": "176", "reaction": "(n,2nh)", "sf5-8": None, "endf": True},
+    "3N+HE3": {"mt": "177", "reaction": "(n,3nh)", "sf5-8": None, "endf": True},
+    "4N+HE3": {"mt": "178", "reaction": "(n,4nh)", "sf5-8": None, "endf": True},
+    "3N+2P": {"mt": "179", "reaction": "(n,3n2p)", "sf5-8": None, "endf": True},
+    "3N+2": {"mt": "180", "reaction": "(n,3n2a)", "sf5-8": None, "endf": True},
+    "3N+P+A": {"mt": "181", "reaction": "(n,3npa)", "sf5-8": None, "endf": True},
+    "D+T": {"mt": "182", "reaction": "(n,dt)", "sf5-8": None, "endf": True},
+    "N+P+D": {"mt": "183", "reaction": "(n,n'pd)", "sf5-8": None, "endf": True},
+    "N+P+T": {"mt": "184", "reaction": "(n,n'pt)", "sf5-8": None, "endf": True},
+    "N+D+T": {"mt": "185", "reaction": "(n,n'dt)", "sf5-8": None, "endf": True},
+    "N+P+HE3": {"mt": "186", "reaction": "(n,n'ph)", "sf5-8": None, "endf": True},
+    "N+D+HE3": {"mt": "187", "reaction": "(n,n'dh)", "sf5-8": None, "endf": True},
+    "N+T+HE3": {"mt": "188", "reaction": "(n,n'th)", "sf5-8": None, "endf": True},
+    "N+T+A": {"mt": "189", "reaction": "(n,n'ta)", "sf5-8": None, "endf": True},
+    "P+HE3": {"mt": "191", "reaction": "(n,ph)", "sf5-8": None, "endf": True},
+    "D+HE": {"mt": "192", "reaction": "(n,dh)", "sf5-8": None, "endf": True},
+    "HE+A": {"mt": "193", "reaction": "(n,ha)", "sf5-8": None, "endf": True},
+    "4N+2P": {"mt": "194", "reaction": "(n,4n2p)", "sf5-8": None, "endf": True},
+    "4N+2A": {"mt": "195", "reaction": "(n,4n2a)", "sf5-8": None, "endf": True},
+    "4N+P+A": {"mt": "196", "reaction": "(n,4npa)", "sf5-8": None, "endf": True},
+    "3P": {"mt": "197", "reaction": "(n,3p)", "sf5-8": None, "endf": True},
+    "N+3P": {"mt": "198", "reaction": "(n,n'3p)", "sf5-8": None, "endf": True},
+    "3N+2P+A": {"mt": "199", "reaction": "(n,3n2pa)", "sf5-8": None, "endf": True},
+    "5N+2P": {"mt": "200", "reaction": "(n,5n2p)", "sf5-8": None, "endf": True},
 }
 
 
@@ -347,29 +357,29 @@ def reaction_list(projectile):
         return sf3_dict
 
     assert len(projectile) == 1
-
-    all = sf3_dict
-    # "EL": {
-    #   "mt": "2",
-    #   "reaction": "(n,elas.)",
-    #   "sf5-8": null
-    #  },
-
-    all = {
-        "N" if projectile.upper() != "N" and k == "INL" else k: i
-        for k, i in all.items()
+    print(projectile)
+    all_reactions = {
+        (
+            "N"
+            if (projectile.upper() != "N" and k == "INL" and i.get("endf"))
+            else k
+        ): i
+        for k, i in sf3_dict.items()
+        if i.get("endf")  # ★ ここで endf=True のみにフィルタ
     }
+
     partial = {}
 
     for p in mt_range.keys():
-        for n in range(len(mt_range[p.upper()])):
-            partial[f"{p.upper()}{str(n)}"] = {
-                "mt": str(mt_range[p.upper()][n]),
-                "reaction": f"({projectile.lower()},{p.lower()}{str(n)}",
+        for n, mt in enumerate(mt_range[p.upper()]):
+            partial[f"{p.upper()}{n}"] = {
+                "mt": str(mt),
+                "reaction": f"({projectile.lower()},{p.lower()}{n})",
                 "sf5-8": "PAR,SIG,,",
+                "endf": True,
             }
 
-    return dict(**all, **partial)
+    return dict(**all_reactions, **partial) 
 
 
 def exfor_reaction_list(projectile):
@@ -379,11 +389,6 @@ def exfor_reaction_list(projectile):
     assert len(projectile) == 1
 
     all = sf3_dict
-    # "EL": {
-    #   "mt": "2",
-    #   "reaction": "(n,elas.)",
-    #   "sf5-8": null
-    #  },
 
     all = {
         "N" if projectile.upper() != "N" and k == "INL" else k: i
@@ -393,31 +398,42 @@ def exfor_reaction_list(projectile):
     return all
 
 
-def get_mf(react_dict):
+def get_mf(reaction):
+    # dict ならキーから取り出す
+    if isinstance(reaction, dict):
+        sf6 = reaction.get("sf6")
+        sf4 = reaction.get("sf4")
+    else:
+        # 文字列は "sf6,sf4" の形式を想定
+        parts = reaction.split(",")
+        sf6 = parts[0].strip()
+        sf4 = parts[1].strip() if len(parts) > 1 else None
 
-    if sf6_to_mf.get(react_dict["sf6"]):
-        if react_dict["sf6"] == "NU":
-            return int(sf6_to_mf[react_dict["sf6"]])
-
-        elif react_dict["sf4"] == "0-G-0":
+    if sf6 in sf6_to_mf:
+        if sf6 == "NU":
+            return int(sf6_to_mf[sf6])
+        elif sf4 == "0-G-0":
             return 12  # Multiplicity of photon production
-
         else:
-            return int(sf6_to_mf[react_dict["sf6"]])
-
+            return int(sf6_to_mf[sf6])
     else:
         return 9999
 
 
+def get_mt(reaction):
+    # exforparser send reaction as react_dict
+    if isinstance(reaction, dict):
+        reaction = reaction["process"]
 
-def get_mt(react_dict):
-    particle = react_dict["process"].split(",")[0].upper()
+    parts = reaction.split(",")
+    particle = parts[0].upper()
     if particle == "HE3":
         particle = "H"
+
     try:
-        reactions = reaction_list( particle )
-        return reactions[ react_dict["process"].split(",")[1].upper() ]["mt"]
-    except:
+        reactions = reaction_list(particle)
+        return reactions[parts[1].upper()]["mt"]
+    except Exception:
         return None
 
 
