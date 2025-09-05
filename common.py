@@ -29,22 +29,39 @@ def open_json(file):
         return None
 
 
-LIB_LIST_MAX = [
-    "tendl.2023",
+
+LIB_LIST_MAX = {
+    "tendl.2023": "TENDL 2023 update",
     # "tendl.2021",
-    "endfb8.1",
-    "eaf.2010",  # European Activation File
-    "jeff4.0",
-    "jendl5.0",
+    "endfb8.1": "ENDF/B-VIII.0",
+    "eaf.2010" : "EAF 2010",  # European Activation File
+    "jeff4.0": "JEFF-4T4",
+    "jendl5.0": "JENDL 5.0",
     # "jendl4.0",
-    "iaea.2022",
+    "iaea.2022": "IAEA 2022",
     # "iaea.2019",
-    "cendl3.2",
-    "irdff2.0",
-    "iaea.pd",
-    "ibandl",
-]
-LIB_LIST_MAX.sort(reverse=True)
+    "cendl3.2": "CENDL 3.2",
+    "irdff2.0": "IRDFF 2.0",
+    "iaea.pd": "IAEA Photonuclear 2019",
+    "ibandl": "IBANDL",
+}
+
+# LIB_LIST_MAX = [
+#     "tendl.2023",
+#     # "tendl.2021",
+#     "endfb8.1",
+#     "eaf.2010",  # European Activation File
+#     # "jeff4.0",
+#     "jendl5.0",
+#     # "jendl4.0",
+#     "iaea.2022",
+#     # "iaea.2019",
+#     "cendl3.2",
+#     "irdff2.0",
+#     "iaea.pd",
+#     "ibandl",
+# ]
+
 
 
 pageparam_to_sf6 = {
@@ -81,7 +98,7 @@ def generate_exfortables_file_path(input_store):
     target = f"{elem.capitalize()}-{str(mass)}"
     exfiles = []
 
-    if obs_type == "TH":
+    if obs_type == "TH" and obs_type == "RP":
         obs_type = "XS"
 
     if level_num:
@@ -120,26 +137,27 @@ def generate_exfortables_file_path(input_store):
         rp_mass = input_store.get("rp_mass")
         residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
 
-        # if not get_str_from_string(rp_mass):
-        #     residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
-
-        # else:
-        #     residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}-{get_str_from_string(rp_mass).upper()}"
-
         if not get_str_from_string(rp_mass):
-            residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}"
+            residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
 
         else:
-            residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}"
+            residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}-{get_str_from_string(rp_mass).upper()}"
+
+        # if not get_str_from_string(rp_mass):
+        #     residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(rp_mass)).zfill(3)}"
+
+        # else:
+        #     residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}"
 
         if os.path.exists(dir):
-            exfiles = [f for f in os.listdir(dir) if residual in f]
+            exfiles = [os.path.join(dir, f) for f in os.listdir(dir) if residual in f]
 
     else:
         if os.path.exists(dir):
-            exfiles = os.listdir(dir)
+            exfiles = [os.path.join(dir, f) for f in os.listdir(dir)]
 
-    return dir, exfiles
+    return exfiles 
+
 
 
 def generate_endftables_file_path(input_store):
@@ -189,13 +207,13 @@ def generate_endftables_file_path(input_store):
                 residual = f"rp{ elemtoz(rp_elem.capitalize()).zfill(3)}{str(int(get_number_from_string(rp_mass))).zfill(3)}{get_str_from_string(rp_mass)}.{lib}"
 
             if os.path.exists(dir):
-                libfiles += [f for f in os.listdir(dir) if residual in f]
+                libfiles += [os.path.join(dir, f) for f in os.listdir(dir) if residual in f]
 
         else:
             if os.path.exists(dir):
-                libfiles += [f for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
+                libfiles += [os.path.join(dir, f) for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
 
-    return dir, libfiles
+    return libfiles
 
 
 def generate_single_endftables_file_path(input_store):
@@ -234,7 +252,7 @@ def generate_single_endftables_file_path(input_store):
         return dir, libfiles[0]
 
 
-def generate_link_of_files(dir, files):
+def generate_link_of_files(files):
     ## similar to list_link_of_files in dataexplorer/common.py
     flinks = []
 

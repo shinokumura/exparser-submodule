@@ -18,6 +18,7 @@ from endftables_sql.scripts.models_core import (
     endf_fy_data,
 )
 from ..utilities.util import libstyle_nuclide_expression
+from ..utilities.reaction import MT_BRANCH_LIST_FY
 
 connection = engines["endftables"].connect()
 
@@ -65,8 +66,7 @@ def lib_index_query(input_store):
 
     queries.append(endf_reactions.c.obs_type == obs_type.lower())
 
-    stmt = select(endf_reactions.c.reaction_id, 
-                  endf_reactions.c.evaluation).where(
+    stmt = select(endf_reactions.c.reaction_id, endf_reactions.c.evaluation).where(
         and_(*queries)
     )
 
@@ -93,8 +93,10 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
 
 def lib_data_query(input_store, ids):
     obs_type = input_store["obs_type"].upper()
-    if obs_type == "XS" or obs_type == "TH":
-        return lib_xs_data_query(ids, thermal=(obs_type == "TH"))
+    if obs_type == "XS":
+        return lib_xs_data_query(ids, thermal=False)
+    elif obs_type == "TH":
+        return lib_xs_data_query(ids, thermal=True)
     elif obs_type == "FY":
         return lib_fy_data_query(ids)
     elif obs_type == "DA":
@@ -104,11 +106,10 @@ def lib_data_query(input_store, ids):
         return lib_residual_data_query(inc_pt, ids)
 
 
-def lib_xs_data_query(ids, thermal=False):
+def lib_xs_data_query(ids, thermal):
     queries = [endf_xs_data.c.reaction_id.in_(ids)]
     if thermal:
-        queries.append(endf_xs_data.c.en_inc.between(2.52e-8, 2.54e-8))
-
+        queries.append(endf_xs_data.c.en_inc == 2.53e-8)
     stmt = select(endf_xs_data).where(and_(*queries))
     with engines["endftables"].connect() as conn:
         df = pd.DataFrame(

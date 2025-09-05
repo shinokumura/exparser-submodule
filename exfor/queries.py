@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 import importlib
 import pandas as pd
 from collections import OrderedDict
@@ -210,9 +211,6 @@ def facility_query(facility_code, facility_type):
 ########  -------------------------------------- ##########
 ##         Reaction queries for the dataexplorer
 ########  -------------------------------------- ##########
-
-
-
 def exfor_index_query(input_store) -> dict:
     obs_type = input_store.get("obs_type").upper()
     elem = input_store.get("target_elem")
@@ -236,7 +234,7 @@ def exfor_index_query(input_store) -> dict:
             queries.append(exfor_indexes.c.sf5 == branch.upper())
 
         elif isinstance(level_num, int):
-            ## override reacton 
+            ## override reacton
             reaction = convert_partial_reactionstr_to_inl(reaction)
             queries.extend(
                 [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
@@ -244,7 +242,9 @@ def exfor_index_query(input_store) -> dict:
         elif input_store.get("excl_junk_switch") or not branch:
             queries.append(exfor_indexes.c.sf5 == None)
 
-        queries.append(exfor_indexes.c.process == reaction.replace("total", "tot").upper())
+        queries.append(
+            exfor_indexes.c.process == reaction.replace("total", "tot").upper()
+        )
 
         if not any(r in reaction for r in ("tot", "f")):
             queries.extend(
@@ -279,24 +279,16 @@ def exfor_index_query(input_store) -> dict:
 
         if branch:
             queries.append(exfor_indexes.c.sf5.in_(tuple(fy_branch(branch.upper()))))
-        elif isinstance(level_num, int):
-            reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend(
-                [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
-            )
+
         elif input_store.get("excl_junk_switch"):
             queries.append(exfor_indexes.c.sf5 == None)
 
-        queries.append(
-            exfor_indexes.c.sf4 == "MASS"
-            if mesurement_opt_fy == "A"
-            else (
-                exfor_indexes.c.sf4 == "ELEM"
-                if mesurement_opt_fy == "Z"
-                else exfor_indexes.c.sf4.isnot(None)
-            )
-        )
-
+        # Measurement options (A=mass, Z=charge)
+        if mesurement_opt_fy == "A":
+            queries.append(exfor_indexes.c.sf4 == "MASS")
+        elif mesurement_opt_fy == "Z":
+            queries.append(exfor_indexes.c.sf4 == "ELEM")
+        # Fission product filtering
         if reac_product_fy:
             queries.append(exfor_indexes.c.residual.in_(reac_product_fy))
 
@@ -304,7 +296,7 @@ def exfor_index_query(input_store) -> dict:
         level_num = input_store.get("level_num")
 
         if isinstance(level_num, int):
-            ## override reacton 
+            ## override reacton
             reaction = convert_partial_reactionstr_to_inl(reaction)
             queries.extend(
                 [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
@@ -319,7 +311,6 @@ def exfor_index_query(input_store) -> dict:
             ]
         )
 
-
     sf6 = pageparam_to_sf6.get(obs_type, "SIG")
 
     # Excute query
@@ -328,13 +319,16 @@ def exfor_index_query(input_store) -> dict:
     # print(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
     with engines["exfor"].connect() as conn:
         result = conn.execute(stmt).fetchall()
-
     entries = (
         {
             row.entry_id: {
                 "level_num": row.level_num,
-                "e_inc_min": row.e_inc_min,
-                "e_inc_max": row.e_inc_max,
+                "e_inc_min": (
+                    (row.e_inc_min / 1e6) if row.e_inc_min is not None else np.nan
+                ),
+                "e_inc_max": (
+                    (row.e_inc_max / 1e6) if row.e_inc_max is not None else np.nan
+                ),
                 "points": row.points,
                 "x4_code": row.x4_code,
                 "sf4": row.sf4,
@@ -469,8 +463,8 @@ def data_query(input_store, entids):
         ]
     elif obs_type == "TH":
         # thermal energy 限定
-        filters.append(exfor_data.c.en_inc >= 2.52e-8)
-        filters.append(exfor_data.c.en_inc <= 2.54e-8)
+        filters.append(exfor_data.c.en_inc >= 2.52e-2)  # in eV
+        filters.append(exfor_data.c.en_inc <= 2.54e-2)  # in eV
         columns = [
             exfor_data.c.entry_id,
             exfor_data.c.en_inc,
@@ -487,6 +481,10 @@ def data_query(input_store, entids):
     with engines["exfor"].connect() as conn:
         result = conn.execute(stmt)
         df = pd.DataFrame(result.fetchall(), columns=result.keys())
+
+        ## Convert eV to MeV
+        df["en_inc"] = df["en_inc"] / 1e6  # eV to MeV
+        df["den_inc"] = df["den_inc"] / 1e6  # eV to MeV
 
     return df
 

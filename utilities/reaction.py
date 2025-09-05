@@ -20,15 +20,23 @@ from .util import get_str_from_string
 # "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None},
 # "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG"},}
 
-exfor_sf3_dict = {
-
-}
+exfor_sf3_dict = {}
 
 
 sf3_dict = {
     "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None, "endf": False},
-    "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None, "endf": False},
-    "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None, "endf": False},
+    "SCT": {
+        "mt": None,
+        "reaction": "elastic scattering plus inelastic scattering",
+        "sf5-8": None,
+        "endf": False,
+    },
+    "X": {
+        "mt": None,
+        "reaction": "Production cross section",
+        "sf5-8": None,
+        "endf": False,
+    },
     "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG", "endf": False},
     "TOT": {"mt": "1", "reaction": "(n,total)", "sf5-8": None, "endf": True},
     "EL": {"mt": "2", "reaction": "(n,elas.)", "sf5-8": None, "endf": True},
@@ -357,13 +365,9 @@ def reaction_list(projectile):
         return sf3_dict
 
     assert len(projectile) == 1
-    print(projectile)
+
     all_reactions = {
-        (
-            "N"
-            if (projectile.upper() != "N" and k == "INL" and i.get("endf"))
-            else k
-        ): i
+        ("N" if (projectile.upper() != "N" and k == "INL" and i.get("endf")) else k): i
         for k, i in sf3_dict.items()
         if i.get("endf")  # ★ ここで endf=True のみにフィルタ
     }
@@ -379,7 +383,7 @@ def reaction_list(projectile):
                 "endf": True,
             }
 
-    return dict(**all_reactions, **partial) 
+    return dict(**all_reactions, **partial)
 
 
 def exfor_reaction_list(projectile):
@@ -476,7 +480,6 @@ def generate_mt_list(projectile):
                 )
     # print(all, partial)
     return dict(**all, **partial)
-
 
 
 def get_mt_non_xs(react_dict):

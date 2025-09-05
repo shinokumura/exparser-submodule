@@ -21,12 +21,27 @@ from datetime import datetime, timedelta
 from .elem import elemtoz_nz
 
 
+def is_valid_number(x):
+    """To avoid to judge None if the value is 0"""
+    if x is None:
+        return False
+    if isinstance(x, str) and x.strip() == "":
+        return False
+    try:
+        float(x)
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def safe_float(x, default):
+    """if the value is number, then convert to float, otherwise return default"""
+    return float(x) if is_valid_number(x) else default
+
+
 def closest(nums, val):
     return nums[min(range(len(nums)), key=lambda i: abs(nums[i] - val))]
 
-
-def closest(nums, val):
-     return nums[min(range(len(nums)), key = lambda i: abs(nums[i]-val))]
 
 def slices(s, *args):
     position = 0
@@ -148,12 +163,15 @@ def print_process_time(start_time=None):
         return time.time()
 
 
+current_year = datetime.now().year
+
+
 def cos_to_angle_degrees(cos_value):
     if not -1.0 <= cos_value <= 1.0:
         raise ValueError("cos_value must be between -1 and 1.")
-    
-    radians = math.acos(cos_value) 
-    degrees = math.degrees(radians)  
+
+    radians = math.acos(cos_value)
+    degrees = math.degrees(radians)
     return degrees
 
 
@@ -164,7 +182,7 @@ def cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm):
 
 
 def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
-     # === パラメータ設定 ===
+    # === パラメータ設定 ===
     m_a = 1.0  # projectile mass
     m_A = 12.0  # target mass
     E_lab = 10.0  # incident energy
@@ -188,9 +206,9 @@ def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
     return theta_cm_rad
 
 
-
-def convert_angle(theta_values, input_system='CM', input_format='deg',
-                  output_format='deg', gamma=0.5):
+def convert_angle(
+    theta_values, input_system="CM", input_format="deg", output_format="deg", gamma=0.5
+):
     """
     簡易的な角度変換関数（CM <-> Lab, degree <-> cosine 対応）
 
@@ -212,35 +230,35 @@ def convert_angle(theta_values, input_system='CM', input_format='deg',
     theta_values = np.array(theta_values)
 
     # 1. 入力を cos(theta_cm) に変換
-    if input_format == 'deg':
+    if input_format == "deg":
         theta_rad = np.radians(theta_values)
         cos_input = np.cos(theta_rad)
-    elif input_format == 'cos':
+    elif input_format == "cos":
         cos_input = theta_values
     else:
         raise ValueError("input_format must be 'deg' or 'cos'")
 
     # 2. 座標系変換
-    if input_system == 'CM':
+    if input_system == "CM":
         # CM → Lab
         cos_out = (cos_input + gamma) / (1 + gamma * cos_input)
-    elif input_system == 'Lab':
+    elif input_system == "Lab":
         # Lab → CM（逆変換）
         cos_out = (cos_input - gamma) / (1 - gamma * cos_input)
     else:
         raise ValueError("input_system must be 'CM' or 'Lab'")
 
     # 3. 出力形式変換
-    if output_format == 'cos':
+    if output_format == "cos":
         return cos_out
-    elif output_format == 'deg':
+    elif output_format == "deg":
         theta_out = np.degrees(np.arccos(cos_out))
         return theta_out
     else:
         raise ValueError("output_format must be 'deg' or 'cos'")
 
 
-def convert_angle_cm_lab(theta_deg, direction='CM_to_LAB', gamma=0.5):
+def convert_angle_cm_lab(theta_deg, direction="CM_to_LAB", gamma=0.5):
     """
     角度（degree）を CM ↔ LAB 間で変換する関数（非相対論的近似）
 
@@ -259,17 +277,16 @@ def convert_angle_cm_lab(theta_deg, direction='CM_to_LAB', gamma=0.5):
     theta_rad = np.radians(theta_deg)
     cos_theta = np.cos(theta_rad)
 
-    if direction == 'CM_to_LAB':
+    if direction == "CM_to_LAB":
         cos_lab = (cos_theta + gamma) / (1 + gamma * cos_theta)
         theta_out_rad = np.arccos(cos_lab)
-    elif direction == 'LAB_to_CM':
+    elif direction == "LAB_to_CM":
         cos_cm = (cos_theta - gamma) / (1 - gamma * cos_theta)
         theta_out_rad = np.arccos(cos_cm)
     else:
         raise ValueError("direction must be 'CM_to_LAB' or 'LAB_to_CM'")
 
     return np.degrees(theta_out_rad)
-
 
 
 def x4style_nuclide_expression(elem, mass):
