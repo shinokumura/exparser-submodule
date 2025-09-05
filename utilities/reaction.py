@@ -345,6 +345,9 @@ sf6_to_dir = {
     "AKE": "kinetic_energy/average",
 }
 
+resonance_parameter_sf6 = ["WID", "WID/STR", "WID/RED", "ARE", "ETA", "ALF"]
+
+
 
 def fy_branch(branch):
     if branch == "PRE":
@@ -424,7 +427,7 @@ def get_mf(reaction):
         return 9999
 
 
-def get_mt(reaction):
+def get_xs_mt(reaction):
     # exforparser send reaction as react_dict
     if isinstance(reaction, dict):
         reaction = reaction["process"]
@@ -439,6 +442,24 @@ def get_mt(reaction):
         return reactions[parts[1].upper()]["mt"]
     except Exception:
         return None
+
+
+def get_fy_mt(reaction):
+    # exforparser send reaction as react_dict
+    if isinstance(reaction, dict):
+        reaction = reaction["process"]
+
+    parts = reaction.split(",")
+    particle = parts[0].upper()
+    if particle == "HE3":
+        particle = "H"
+
+    try:
+        reactions = reaction_list(particle)
+        return reactions[parts[1].upper()]["mt"]
+    except Exception:
+        return None
+
 
 
 def convert_partial_reactionstr_to_inl(reaction):
