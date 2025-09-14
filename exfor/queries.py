@@ -284,13 +284,15 @@ def exfor_index_query(input_store) -> dict:
             queries.append(exfor_indexes.c.sf5 == None)
 
         # Measurement options (A=mass, Z=charge)
-        if mesurement_opt_fy == "A":
-            queries.append(exfor_indexes.c.sf4 == "MASS")
-        elif mesurement_opt_fy == "Z":
-            queries.append(exfor_indexes.c.sf4 == "ELEM")
-        # Fission product filtering
-        if reac_product_fy:
-            queries.append(exfor_indexes.c.residual.in_(reac_product_fy))
+        # if mesurement_opt_fy == "A":
+        #     queries.append(exfor_indexes.c.sf4 == "MASS")
+
+        # elif mesurement_opt_fy == "Z":
+        #     queries.append(exfor_indexes.c.sf4 == "ELEM")
+
+        # # Fission product filtering
+        # if reac_product_fy:
+        #     queries.append(exfor_indexes.c.residual.in_(reac_product_fy))
 
     if obs_type == "DA":
         level_num = input_store.get("level_num")

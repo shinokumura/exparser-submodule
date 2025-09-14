@@ -182,7 +182,7 @@ def cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm):
 
 
 def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
-    # === パラメータ設定 ===
+
     m_a = 1.0  # projectile mass
     m_A = 12.0  # target mass
     E_lab = 10.0  # incident energy
@@ -196,11 +196,11 @@ def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
     E_cm = mu * v_a**2 / 2
     v_b_cm = np.sqrt(2 * E_cm / m_b)  # speed of b in CM
 
-    # === CM角度分布（等方） ===
+    # === CM angle conversion ===
     theta_cm_deg = np.linspace(0, 180, 180)
     theta_cm_rad = np.radians(theta_cm_deg)
 
-    # # === Lab角度変換 ===
+    # # === Lab angle conversion ===
     # theta_lab_rad = cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm)
     # theta_lab_deg = np.degrees(theta_lab_rad)
     return theta_cm_rad
@@ -209,27 +209,9 @@ def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
 def convert_angle(
     theta_values, input_system="CM", input_format="deg", output_format="deg", gamma=0.5
 ):
-    """
-    簡易的な角度変換関数（CM <-> Lab, degree <-> cosine 対応）
-
-    Parameters:
-    - theta_values: np.ndarray or list
-        入力角度（degreeまたはcos(theta)）
-    - input_system: 'CM' or 'Lab'
-        入力の座標系
-    - input_format: 'deg' or 'cos'
-        入力角度の形式
-    - output_format: 'deg' or 'cos'
-        出力角度の形式
-    - gamma: float
-        v_CM / v_b_CM の速度比（反応により変える）
-
-    Returns:
-    - 変換後の角度（degreeまたはcos形式）
-    """
     theta_values = np.array(theta_values)
 
-    # 1. 入力を cos(theta_cm) に変換
+    # 1. os(theta_cm) 
     if input_format == "deg":
         theta_rad = np.radians(theta_values)
         cos_input = np.cos(theta_rad)
@@ -238,17 +220,15 @@ def convert_angle(
     else:
         raise ValueError("input_format must be 'deg' or 'cos'")
 
-    # 2. 座標系変換
     if input_system == "CM":
         # CM → Lab
         cos_out = (cos_input + gamma) / (1 + gamma * cos_input)
     elif input_system == "Lab":
-        # Lab → CM（逆変換）
+        # Lab → CM
         cos_out = (cos_input - gamma) / (1 - gamma * cos_input)
     else:
         raise ValueError("input_system must be 'CM' or 'Lab'")
 
-    # 3. 出力形式変換
     if output_format == "cos":
         return cos_out
     elif output_format == "deg":
@@ -259,21 +239,7 @@ def convert_angle(
 
 
 def convert_angle_cm_lab(theta_deg, direction="CM_to_LAB", gamma=0.5):
-    """
-    角度（degree）を CM ↔ LAB 間で変換する関数（非相対論的近似）
 
-    Parameters:
-    - theta_deg : array-like
-        入力角度（単位：degree、CMまたはLAB系）
-    - direction : str
-        'CM_to_LAB' または 'LAB_to_CM'
-    - gamma : float
-        v_CM / v_b_CM の速度比（反応によって決まる）
-
-    Returns:
-    - theta_out_deg : np.ndarray
-        変換後の角度（degree）
-    """
     theta_rad = np.radians(theta_deg)
     cos_theta = np.cos(theta_rad)
 
