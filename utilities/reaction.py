@@ -503,6 +503,30 @@ def generate_mt_list(projectile):
     return dict(**all, **partial)
 
 
+
+
+
+def get_mt(reaction):
+    # exforparser send reaction as react_dict
+    if isinstance(reaction, dict):
+        reaction = reaction["process"]
+
+
+    parts = reaction.split(",")
+    particle = parts[0].upper()
+    if particle == "HE3":
+        particle = "H"
+
+
+    try:
+        reactions = reaction_list(particle)
+        return reactions[parts[1].upper()]["mt"]
+    except Exception:
+        return None
+
+
+
+
 def get_mt_non_xs(react_dict):
 
     if react_dict["sf6"] == "FY":
