@@ -9,6 +9,7 @@ except:
     module_name = sys.modules[__name__].split(".")[0]
     config = importlib.import_module(f"{module_name}.config")
     from config import engines
+
 from endftables_sql.scripts.models_core import (
     endf_reactions,
     endf_xs_data,
@@ -18,16 +19,12 @@ from endftables_sql.scripts.models_core import (
     endf_fy_data,
 )
 from ..utilities.util import libstyle_nuclide_expression
-from ..utilities.reaction import MT_BRANCH_LIST_FY
 
-connection = engines["endftables"].connect()
 
 
 ######## -------------------------------------- ########
 #    Queries for endftables
 ######## -------------------------------------- ########
-
-
 def lib_index_query(input_store):
 
     obs_type = input_store.get("obs_type").upper()
@@ -189,10 +186,11 @@ def get_all_endf_reaction():
     return df
 
 
-def get_xs_reaction_list(input_store):
+def get_reaction_list(input_store):
 
     columns = [
         endf_reactions.c.reaction_id,
+        endf_reactions.c.obs_type,
         endf_reactions.c.evaluation,
         endf_reactions.c.target,
         endf_reactions.c.projectile,
@@ -200,11 +198,29 @@ def get_xs_reaction_list(input_store):
         endf_reactions.c.mt,
     ]
 
+    obs_type = input_store.get("obs_type")
+
+    if obs_type == "RP":
+        obs_type = "residual"
+
+    elif obs_type == "DA":
+        obs_type = "angle"
+        columns.append(endf_reactions.c.en_inc,)
+
+    elif obs_type == "DE":
+        obs_type = "energy"
+
+    else:
+        obs_type = "xs"
+
+
+
     if not input_store:
         return pd.DataFrame(columns=[col.name for col in columns])
 
     conditions = []
-    conditions.append(endf_reactions.c.obs_type == "xs")
+
+    conditions.append(endf_reactions.c.obs_type == obs_type)
 
     evaluations = input_store.get("evaluation")
     if evaluations:
@@ -237,6 +253,7 @@ def get_xs_reaction_list(input_store):
                 endf_reactions.c.evaluation,
                 endf_reactions.c.target,
                 endf_reactions.c.mt,
+                endf_reactions.c.en_inc,
             )
         )
 

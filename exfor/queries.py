@@ -5,16 +5,23 @@ import pandas as pd
 from collections import OrderedDict
 from operator import getitem
 from sqlalchemy import select, and_, not_, func
-from sqlalchemy.dialects import sqlite
 
 try:
-    from config import engines, session
-except:
+    # from app.py
+    from config import engines
+except ImportError:
+    # for unit test
     module_name = sys.modules[__name__].split(".")[0]
     config = importlib.import_module(f"{module_name}.config")
-    from config import engines, session
+    from config import engines
 
-from exforparser.sql.models import Exfor_Bib, Exfor_Reactions, Exfor_Data, Exfor_Indexes
+from exforparser.sql.models_core import (
+    exfor_bib,
+    exfor_reactions,
+    exfor_data,
+    exfor_indexes,
+)
+
 from exforparser.sql.models_core import (
     exfor_bib,
     exfor_reactions,
@@ -23,20 +30,17 @@ from exforparser.sql.models_core import (
 )
 
 from ..common import pageparam_to_sf6
-from ..utilities.util import elemtoz_nz
 from ..utilities.util import (
+    elemtoz_nz,
     get_number_from_string,
     get_str_from_string,
     x4style_nuclide_expression,
 )
-from ..utilities.reaction import convert_partial_reactionstr_to_inl
 from ..utilities.reaction import (
+    convert_partial_reactionstr_to_inl,
     convert_reaction_to_exfor_style,
     convert_partial_reactionstr_to_inl,
 )
-
-
-# connection = engines["exfor"].connect()
 
 
 def get_exfor_bib_table():
@@ -75,7 +79,6 @@ def get_exfor_indexes_table():
 def entries_query(**kwargs):
     queries = []
 
-    # 条件の取得
     types = kwargs.get("types")
     elem = kwargs.get("target_elem")
     mass = kwargs.get("target_mass")
@@ -93,7 +96,6 @@ def entries_query(**kwargs):
     sf7 = kwargs.get("sf7")
     sf8 = kwargs.get("sf8")
 
-    # 条件を動的に組み立て
     if types:
         queries.append(exfor_reactions.c.sf6.in_(types))
 
@@ -139,7 +141,6 @@ def entries_query(**kwargs):
     if sf8:
         queries.append(exfor_reactions.c.sf8.in_(sf8))
 
-    # SELECT クエリ構築
     stmt = (
         select(
             exfor_reactions.c.entry,
@@ -184,13 +185,11 @@ def entries_query(**kwargs):
 
 
 def facility_query(facility_code, facility_type):
-    # クエリ条件
     queries = [
         exfor_indexes.c.main_facility_institute == facility_code,
         exfor_indexes.c.main_facility_type == facility_type.upper(),
     ]
 
-    # SQLAlchemy Core クエリ構築
     stmt = (
         select(exfor_indexes, exfor_bib)
         .select_from(
@@ -509,16 +508,15 @@ def fy_branch(branch):
 
 
 def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
-    # https://zenn.dev/shimakaze_soft/articles/6e5e47851459f5
     sf4 = None
     sf5 = None
     sf6 = None
     target = x4style_nuclide_expression(elem, mass)
 
     queries = [
-        Exfor_Indexes.target == target,
-        Exfor_Indexes.process == reaction.upper(),
-        Exfor_Indexes.arbitrary_data == False,
+        exfor_indexes.c.target == target,
+        exfor_indexes.c.process == reaction.upper(),
+        exfor_indexes.c.arbitrary_data == False,
     ]
 
     if branch == "nu_n":
@@ -543,25 +541,27 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
         return None, None
 
     if sf4:
-        queries.append(Exfor_Indexes.sf4 == sf4)
+        queries.append(exfor_indexes.c.sf4 == sf4)
 
     if sf5:
-        queries.append(Exfor_Indexes.sf5.in_(tuple(sf5)))
+        queries.append(exfor_indexes.c.sf5.in_(tuple(sf5)))
 
     if sf6:
-        queries.append(Exfor_Indexes.sf6.in_(tuple(sf6)))
+        queries.append(exfor_indexes.c.sf6.in_(tuple(sf6)))
 
     if lower and upper:
         # lower, upper = energy_range_conversion(energy_range)
-        queries.append(Exfor_Indexes.e_inc_min >= lower)
-        queries.append(Exfor_Indexes.e_inc_max <= upper)
+        queries.append(exfor_indexes.c.e_inc_min >= lower)
+        queries.append(exfor_indexes.c.e_inc_max <= upper)
 
-    reac = session().query(Exfor_Indexes).filter(*queries).all()
+    stmt = select(exfor_indexes).where(*queries)
+
+    with engines["exfor"].connect() as conn:
+            entries = conn.execute(stmt).fetchall()
 
     entids = {}
-    entries = []
 
-    for ent in reac:
+    for ent in entries:
         entids[ent.entry_id] = {
             "e_inc_min": ent.e_inc_min,
             "e_inc_max": ent.e_inc_max,
@@ -578,47 +578,43 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
 ########  -------------------------------------- ##########
 ##         Join table for AGGrid
 ########  -------------------------------------- ##########
+from sqlalchemy import select, func
+
 def join_reaction_bib():
-    # connection = engines["exfor"].connect()
-    all = (
-        session()
-        .query(
-            # Exfor_Reactions
-            Exfor_Reactions.entry,
-            Exfor_Reactions.entry_id,
-            Exfor_Reactions.target,
-            Exfor_Reactions.projectile,
-            Exfor_Reactions.process,
-            Exfor_Reactions.sf4,
-            Exfor_Reactions.sf6,
-            Exfor_Bib.first_author,
-            Exfor_Bib.first_author_institute,
-            Exfor_Bib.title,
-            Exfor_Bib.main_reference,
-            Exfor_Bib.main_doi,
-            Exfor_Bib.authors,
-            Exfor_Bib.year,
-            Exfor_Bib.main_facility_institute,
-            Exfor_Bib.main_facility_type,
-            func.min(Exfor_Indexes.e_inc_min).label("e_inc_min"),
-            func.max(Exfor_Indexes.e_inc_max).label("e_inc_max"),
-            # Exfor_Indexes.e_inc_min
+    stmt = (
+        select(
+            exfor_reactions.c.entry,
+            exfor_reactions.c.entry_id,
+            exfor_reactions.c.target,
+            exfor_reactions.c.projectile,
+            exfor_reactions.c.process,
+            exfor_reactions.c.sf4,
+            exfor_reactions.c.sf6,
+            exfor_bib.c.first_author,
+            exfor_bib.c.first_author_institute,
+            exfor_bib.c.title,
+            exfor_bib.c.main_reference,
+            exfor_bib.c.main_doi,
+            exfor_bib.c.authors,
+            exfor_bib.c.year,
+            exfor_bib.c.main_facility_institute,
+            exfor_bib.c.main_facility_type,
+            func.min(exfor_indexes.c.e_inc_min).label("e_inc_min"),
+            func.max(exfor_indexes.c.e_inc_max).label("e_inc_max"),
         )
-        .join(
-            Exfor_Bib,
-            Exfor_Reactions.entry == Exfor_Bib.entry,
+        .select_from(
+            exfor_reactions
+            .join(exfor_bib, exfor_reactions.c.entry == exfor_bib.c.entry)
+            .join(exfor_indexes, exfor_indexes.c.entry_id == exfor_reactions.c.entry_id)
         )
-        .join(
-            Exfor_Indexes,
-            Exfor_Indexes.entry_id == Exfor_Reactions.entry_id,
-        )
-        .group_by(Exfor_Reactions.entry_id)
-        .order_by(Exfor_Bib.year.desc())
+        .group_by(exfor_reactions.c.entry_id)
+        .order_by(exfor_bib.c.year.desc())
     )
 
+    # 2. そのままconnectionで実行
     with engines["exfor"].connect() as connection:
         df = pd.read_sql(
-            sql=all.statement,
+            sql=stmt,
             con=connection,
         )
 
@@ -626,28 +622,26 @@ def join_reaction_bib():
 
 
 def join_index_bib():
-    # connection = engines["exfor"].connect()
     all = (
-        session()
-        .query(
-            Exfor_Indexes.entry_id,
-            Exfor_Indexes.target,
-            Exfor_Indexes.process,
-            Exfor_Indexes.residual,
-            Exfor_Indexes.e_inc_min,
-            Exfor_Indexes.e_inc_max,
-            Exfor_Indexes.sf5,
-            Exfor_Indexes.sf6,
-            Exfor_Indexes.sf7,
-            Exfor_Indexes.sf8,
-            Exfor_Bib.entry,
-            Exfor_Bib.authors,
-            Exfor_Bib.year,
-            Exfor_Bib.main_facility_institute,
-            Exfor_Bib.main_facility_type,
+        select(
+            exfor_indexes.c.entry_id,
+            exfor_indexes.c.target,
+            exfor_indexes.c.process,
+            exfor_indexes.c.residual,
+            exfor_indexes.c.e_inc_min,
+            exfor_indexes.c.e_inc_max,
+            exfor_indexes.c.sf5,
+            exfor_indexes.c.sf6,
+            exfor_indexes.c.sf7,
+            exfor_indexes.c.sf8,
+            exfor_bib.c.entry,
+            exfor_bib.c.authors,
+            exfor_bib.c.year,
+            exfor_bib.c.main_facility_institute,
+            exfor_bib.c.main_facility_type,
         )
-        .join(Exfor_Bib, Exfor_Bib.entry == Exfor_Indexes.entry)
-        .order_by(Exfor_Bib.year.desc())
+        .join(exfor_bib, exfor_bib.c.entry == exfor_indexes.c.entry)
+        .order_by(exfor_bib.c.year.desc())
     )
 
     with engines["exfor"].connect() as connection:

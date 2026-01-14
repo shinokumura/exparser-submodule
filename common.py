@@ -31,37 +31,20 @@ def open_json(file):
 
 
 LIB_LIST_MAX = {
-    "tendl.2023": "TENDL 2023 update",
+    "tendl.2023": "TENDL-2023-update",
     # "tendl.2021",
     "endfb8.1": "ENDF/B-VIII.0",
-    "eaf.2010" : "EAF 2010",  # European Activation File
+    "eaf.2010" : "EAF-2010",  # European Activation File
     "jeff4.0": "JEFF-4T4",
-    "jendl5.0": "JENDL 5.0",
+    "jendl5.0": "JENDL-5.0",
     # "jendl4.0",
-    "iaea.2022": "IAEA 2022",
+    "iaea.2022": "IAEA-2022",
     # "iaea.2019",
-    "cendl3.2": "CENDL 3.2",
-    "irdff2.0": "IRDFF 2.0",
+    "cendl3.2": "CENDL-3.2",
+    "irdff2.0": "IRDFF-2.0",
     "iaea.pd": "IAEA Photonuclear 2019",
     "ibandl": "IBANDL",
 }
-
-# LIB_LIST_MAX = [
-#     "tendl.2023",
-#     # "tendl.2021",
-#     "endfb8.1",
-#     "eaf.2010",  # European Activation File
-#     # "jeff4.0",
-#     "jendl5.0",
-#     # "jendl4.0",
-#     "iaea.2022",
-#     # "iaea.2019",
-#     "cendl3.2",
-#     "irdff2.0",
-#     "iaea.pd",
-#     "ibandl",
-# ]
-
 
 
 pageparam_to_sf6 = {
@@ -260,8 +243,6 @@ def generate_link_of_files(files):
         filename = os.path.basename(f)
         dirname = os.path.dirname(f)
         linkdir = dirname.replace(DATA_DIR, "")
-
-        fullpath = os.path.join(dir, filename)
 
         flinks.append(linkdir)
         # flinks.append(html.Br())
