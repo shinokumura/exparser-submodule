@@ -5,10 +5,10 @@ from sqlalchemy import select, and_, or_, distinct
 
 try:
     from config import engines
-except:
-    module_name = sys.modules[__name__].split(".")[0]
+except Exception:
+    module_name = __name__.split(".")[0]
     config = importlib.import_module(f"{module_name}.config")
-    from config import engines
+    engines = config.engines
 
 from endftables_sql.scripts.models_core import (
     endf_reactions,
@@ -17,6 +17,7 @@ from endftables_sql.scripts.models_core import (
     endf_residual_data,
     endf_n_residual_data,
     endf_fy_data,
+    resonancetable_data,
 )
 from ..utilities.util import libstyle_nuclide_expression
 
@@ -261,3 +262,174 @@ def get_reaction_list(input_store):
         df = pd.read_sql(stmt, conn)
 
     return df
+
+
+######## -------------------------------------- ########
+#    Queries for resonancetable_data
+#    (MACS, thermal XS, resonance parameters from
+#     RIPL-3, Mughabghab, NDLs, etc.)
+######## -------------------------------------- ########
+
+
+def _nuclide_str(elem: str, mass: int, liso: int = 0) -> str:
+    """
+    Build the nuclide string as stored in resonancetable_data,
+    e.g. ('U', 235, 0) → 'U235', ('Am', 242, 1) → 'Am242m'.
+    """
+    isomer = "" if liso == 0 else "m" if liso == 1 else f"m{liso}"
+    return f"{elem.capitalize()}{mass}{isomer}"
+
+
+def resonancetable_index_query(input_store: dict) -> pd.DataFrame:
+    """
+    Return the list of available sources for a given nuclide + quantity
+    in resonancetable_data.
+
+    input_store keys
+    ----------------
+    target_elem : str   element symbol, e.g. 'U'
+    target_mass : int   mass number, e.g. 235
+    target_liso : int   isomeric state (default 0)
+    data_type   : str   'macs' | 'thermal' | 'resonance_param'
+    quantity    : str   e.g. 'ng', 'D0', 'Ig', 'gamgam0'
+
+    Returns
+    -------
+    DataFrame with columns: source, value, dvalue, n_exper,
+                            rel_dev_comp, rel_dev_ndl, rel_dev_exfor, rel_dev_all
+    ordered with 'selected' first, then alphabetically.
+    """
+    elem      = input_store.get("target_elem", "")
+    mass      = int(input_store.get("target_mass", 0))
+    liso      = int(input_store.get("target_liso", 0))
+    data_type = input_store.get("data_type", "")
+    quantity  = input_store.get("quantity", "")
+
+    nuclide = _nuclide_str(elem, mass, liso)
+
+    stmt = (
+        select(
+            resonancetable_data.c.source,
+            resonancetable_data.c.value,
+            resonancetable_data.c.dvalue,
+            resonancetable_data.c.n_exper,
+            resonancetable_data.c.rel_dev_comp,
+            resonancetable_data.c.rel_dev_ndl,
+            resonancetable_data.c.rel_dev_exfor,
+            resonancetable_data.c.rel_dev_all,
+            resonancetable_data.c.spectrum,
+        )
+        .where(
+            and_(
+                resonancetable_data.c.nuclide   == nuclide,
+                resonancetable_data.c.data_type == data_type,
+                resonancetable_data.c.quantity  == quantity,
+            )
+        )
+        .order_by(
+            # 'selected' first, then alphabetical
+            (resonancetable_data.c.source != "selected").asc(),
+            resonancetable_data.c.source.asc(),
+        )
+    )
+
+    with engines["endftables"].connect() as conn:
+        df = pd.read_sql(stmt, conn)
+
+    return df
+
+
+def resonancetable_selected_query(input_store: dict) -> pd.Series:
+    """
+    Return the single 'selected' (recommended) value for a nuclide + quantity.
+
+    Returns a pandas Series with the row, or an empty Series if not found.
+    """
+    df = resonancetable_index_query(input_store)
+    sel = df[df["source"] == "selected"]
+    return sel.iloc[0] if not sel.empty else pd.Series(dtype=float)
+
+
+def resonancetable_nuclide_list(data_type: str, quantity: str, source: str = "selected") -> pd.DataFrame:
+    """
+    Return all nuclides that have a value for the given data_type + quantity + source,
+    ordered by Z then A.  Useful for populating dropdowns and overview plots.
+
+    Parameters
+    ----------
+    data_type : 'macs' | 'thermal' | 'resonance_param'
+    quantity  : e.g. 'ng', 'D0', 'Ig'
+    source    : filter to a specific source (default 'selected')
+                pass None to return all sources
+
+    Returns
+    -------
+    DataFrame with columns: z, a, liso, nuclide, value, dvalue
+    """
+    conditions = [
+        resonancetable_data.c.data_type == data_type,
+        resonancetable_data.c.quantity  == quantity,
+    ]
+    if source is not None:
+        conditions.append(resonancetable_data.c.source == source)
+
+    stmt = (
+        select(
+            resonancetable_data.c.z,
+            resonancetable_data.c.a,
+            resonancetable_data.c.liso,
+            resonancetable_data.c.nuclide,
+            resonancetable_data.c.value,
+            resonancetable_data.c.dvalue,
+            resonancetable_data.c.source,
+        )
+        .where(and_(*conditions))
+        .order_by(
+            resonancetable_data.c.z,
+            resonancetable_data.c.a,
+            resonancetable_data.c.liso,
+        )
+    )
+
+    with engines["endftables"].connect() as conn:
+        df = pd.read_sql(stmt, conn)
+
+    return df
+
+
+def resonancetable_source_list(data_type: str, quantity: str) -> list[str]:
+    """
+    Return the distinct sources available for a given data_type + quantity,
+    with 'selected' first.
+    """
+    stmt = (
+        select(distinct(resonancetable_data.c.source))
+        .where(
+            and_(
+                resonancetable_data.c.data_type == data_type,
+                resonancetable_data.c.quantity  == quantity,
+            )
+        )
+        .order_by(resonancetable_data.c.source)
+    )
+
+    with engines["endftables"].connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+
+    sources = [r[0] for r in rows]
+    # put 'selected' first
+    if "selected" in sources:
+        sources.insert(0, sources.pop(sources.index("selected")))
+    return sources
+
+
+def resonancetable_quantity_list(data_type: str) -> list[str]:
+    """Return distinct quantities stored for a given data_type."""
+    stmt = (
+        select(distinct(resonancetable_data.c.quantity))
+        .where(resonancetable_data.c.data_type == data_type)
+        .order_by(resonancetable_data.c.quantity)
+    )
+    with engines["endftables"].connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+    return [r[0] for r in rows]
