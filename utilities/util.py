@@ -66,22 +66,6 @@ def split_by_number(x) -> list:
     return re.split(r"(\d+)", x)
 
 
-def get_number_from_string(x):
-    return re.sub(r"\D+", "", x)
-
-
-def get_str_from_string(x):
-    return re.sub(r"\d+", "", str(x))
-
-
-def split_by_number(x) -> list:
-    ## retrun list for e.g.
-    # ['Br', '077', '']
-    # ['Br', '077', 'g']
-    # ['Br', '077', 'm']
-    return re.split(r"(\d+)", x)
-
-
 def flatten(xs):
     from collections.abc import Iterable
 
@@ -94,15 +78,6 @@ def flatten(xs):
 
 def flatten_list(list):
     return [item for sublist in list for item in sublist]
-
-
-def check_list(init_list):
-    # print(any(isinstance(i, list) for i in init_list))
-    def _is_list_instance(init_list):
-        sub_list = flatten_list(init_list)
-        _is_list_instance(sub_list)
-
-        return isinstance(init_list, list)
 
 
 def dict_merge(dicts_list):
@@ -182,13 +157,6 @@ def cm_to_lab_angle(theta_cm_rad, v_cm, v_b_cm):
 
 
 def calc_kinetics(m_a, m_A, E_lab, m_b, m_B):
-
-    m_a = 1.0  # projectile mass
-    m_A = 12.0  # target mass
-    E_lab = 10.0  # incident energy
-    m_b = 1.0  # outgoing particle mass
-    m_B = 12.0  # residual mass
-
     # === kinetics ===
     mu = (m_a * m_A) / (m_a + m_A)  # simplified reduced mass
     v_a = np.sqrt(2 * E_lab / m_a)

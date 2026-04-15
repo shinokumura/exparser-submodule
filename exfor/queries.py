@@ -161,8 +161,8 @@ def entries_query(**kwargs):
             exfor_bib.c.main_doi,
             exfor_bib.c.main_facility_institute,
             exfor_bib.c.main_facility_type,
-            func.min(exfor_indexes.c.e_inc_min).label("e_inc_min"),
-            func.max(exfor_indexes.c.e_inc_max).label("e_inc_max"),
+            func.min(exfor_indexes.c.en_inc_min).label("en_inc_min"),
+            func.max(exfor_indexes.c.en_inc_max).label("en_inc_max"),
         )
         .select_from(
             exfor_reactions.join(
@@ -324,11 +324,11 @@ def exfor_index_query(input_store) -> dict:
         {
             row.entry_id: {
                 "level_num": row.level_num,
-                "e_inc_min": (
-                    (row.e_inc_min / 1e6) if row.e_inc_min is not None else np.nan
+                "en_inc_min": (
+                    (row.en_inc_min / 1e6) if row.en_inc_min is not None else np.nan
                 ),
-                "e_inc_max": (
-                    (row.e_inc_max / 1e6) if row.e_inc_max is not None else np.nan
+                "en_inc_max": (
+                    (row.en_inc_max / 1e6) if row.en_inc_max is not None else np.nan
                 ),
                 "points": row.points,
                 "x4_code": row.x4_code,
@@ -563,8 +563,8 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
 
     for ent in entries:
         entids[ent.entry_id] = {
-            "e_inc_min": ent.e_inc_min,
-            "e_inc_max": ent.e_inc_max,
+            "en_inc_min": ent.en_inc_min,
+            "en_inc_max": ent.en_inc_max,
             "points": ent.points,
             "sf5": ent.sf5,
             "sf8": ent.sf8,
