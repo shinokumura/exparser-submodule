@@ -22,13 +22,6 @@ from exforparser.sql.models_core import (
     exfor_indexes,
 )
 
-from exforparser.sql.models_core import (
-    exfor_bib,
-    exfor_reactions,
-    exfor_data,
-    exfor_indexes,
-)
-
 from ..common import pageparam_to_sf6
 from ..utilities.util import (
     elemtoz_nz,
@@ -210,116 +203,162 @@ def facility_query(facility_code, facility_type):
 ########  -------------------------------------- ##########
 ##         Reaction queries for the dataexplorer
 ########  -------------------------------------- ##########
+
+def _exfor_cond_xs(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for XS, TH, and RI queries (SIG observables)."""
+    branch = input_store.get("branch")
+    level_num = input_store.get("level_num")
+    conditions = []
+
+    if branch:
+        conditions.append(exfor_indexes.c.sf5 == branch.upper())
+    elif isinstance(level_num, int):
+        reaction = convert_partial_reactionstr_to_inl(reaction)
+        conditions += [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
+    elif input_store.get("excl_junk_switch") or not branch:
+        conditions.append(exfor_indexes.c.sf5 == None)
+
+    conditions.append(
+        exfor_indexes.c.process == reaction.replace("total", "tot").upper()
+    )
+
+    if not any(r in reaction for r in ("tot", "f")):
+        conditions += [
+            not_(exfor_indexes.c.sf4.endswith(f"-{suffix}"))
+            for suffix in ("G", "M", "L", "M1", "M2")
+        ]
+
+    return conditions, reaction
+
+
+def _exfor_cond_rp(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for residual product (RP) queries.
+    Residual nuclides are stored as e.g. 'Mg-28' or 'Sc-44-M' in the index table.
+    """
+    rp_elem = input_store.get("rp_elem")
+    rp_mass = input_store.get("rp_mass")
+    if rp_mass.endswith(("m", "M", "g", "G", "L", "M1", "M2", "m1", "m2")):
+        rp_mass_fmt = f"{rp_elem.capitalize()}-{get_number_from_string(rp_mass)}-{get_str_from_string(str(rp_mass)).upper()}"
+    else:
+        rp_mass_fmt = f"{rp_elem.capitalize()}-{rp_mass}"
+    return [exfor_indexes.c.residual == rp_mass_fmt], reaction
+
+
+def _exfor_cond_fy(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for fission yield (FY) queries."""
+    branch = input_store.get("branch")
+    conditions = []
+    if branch:
+        conditions.append(exfor_indexes.c.sf5.in_(tuple(fy_branch(branch.upper()))))
+    elif input_store.get("excl_junk_switch"):
+        conditions.append(exfor_indexes.c.sf5 == None)
+    return conditions, reaction
+
+
+def _exfor_cond_da(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for angular distribution (DA) queries."""
+    level_num = input_store.get("level_num")
+    conditions = []
+    if isinstance(level_num, int):
+        reaction = convert_partial_reactionstr_to_inl(reaction)
+        conditions += [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
+    return conditions, reaction
+
+
+def _exfor_cond_macs(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for MACS (Maxwellian-Averaged Cross Section) queries.
+    MACS entries carry sf8 in ['MXW', 'MXW/MSC', 'MXW/FCT', 'SPA'] to distinguish
+    them from ordinary cross sections at the same energy.  sf5 and sf7 must be absent.
+    Config sets fixed_sf8=True so excl_junk_switch does not also require sf8==None.
+    """
+    conditions = [
+        exfor_indexes.c.sf5 == None,
+        exfor_indexes.c.sf7 == None,
+        exfor_indexes.c.sf8.in_(["MXW", "MXW/MSC", "MXW/FCT", "MXW+", "SPA"]),
+        exfor_indexes.c.process == reaction.upper(),
+    ]
+    return conditions, reaction
+
+
+def _exfor_cond_gg(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for gamma-gamma width (GG) queries.
+    GG entries carry sf6='WID' and sf8='AV' (averaged over resolved resonances).
+    Config sets fixed_sf8=True so excl_junk_switch does not also require sf8==None.
+    """
+    conditions = [
+        exfor_indexes.c.sf5 == None,
+        exfor_indexes.c.sf7 == None,
+        exfor_indexes.c.sf8 == "AV",
+        exfor_indexes.c.process == reaction.upper(),
+    ]
+    return conditions, reaction
+
+
+def _exfor_cond_d(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for resonance spacing (D) queries.
+    Typically reaction is 'N,0' (zero-level EXFOR code for level spacing).
+    """
+    conditions = [
+        exfor_indexes.c.sf5 == None,
+        exfor_indexes.c.sf7 == None,
+        exfor_indexes.c.process == reaction.upper(),
+    ]
+    return conditions, reaction
+
+
+# Maps the page-level obs_type key to:
+#   sf6      : the EXFOR SF6 field value used in the index table
+#   extra    : callable(input_store, reaction) -> (conditions, reaction)
+#              returns obs_type-specific query conditions and the (possibly overridden) reaction string
+#   fixed_sf8: when True the builder already pins sf8, so excl_junk_switch must NOT also
+#              require sf8==None (which would produce zero results for MACS/GG)
+# To add a new observable: add one entry here and implement its condition builder above.
+EXFOR_OBS_TYPE_CONFIG: dict = {
+    "XS":   {"sf6": "SIG", "extra": _exfor_cond_xs,           "fixed_sf8": False},
+    "TH":   {"sf6": "SIG", "extra": _exfor_cond_xs,           "fixed_sf8": False},  # energy filter applied in data_query
+    "RI":   {"sf6": "RI",  "extra": _exfor_cond_xs,           "fixed_sf8": False},
+    "RP":   {"sf6": "SIG", "extra": _exfor_cond_rp,           "fixed_sf8": False},
+    "FY":   {"sf6": "FY",  "extra": _exfor_cond_fy,           "fixed_sf8": False},
+    "DA":   {"sf6": "DA",  "extra": _exfor_cond_da,           "fixed_sf8": False},
+    "DE":   {"sf6": "DE",  "extra": lambda _, r: ([], r),     "fixed_sf8": False},
+    "MACS": {"sf6": "SIG", "extra": _exfor_cond_macs,         "fixed_sf8": True},   # sf8=MXW/* set by builder
+    "GG":   {"sf6": "WID", "extra": _exfor_cond_gg,           "fixed_sf8": True},   # sf8=AV    set by builder
+    "D":    {"sf6": "D",   "extra": _exfor_cond_d,            "fixed_sf8": False},
+}
+
+
 def exfor_index_query(input_store) -> dict:
     obs_type = input_store.get("obs_type").upper()
-    elem = input_store.get("target_elem")
-    mass = input_store.get("target_mass")
+    config = EXFOR_OBS_TYPE_CONFIG[obs_type]
+
+    reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
+    target = x4style_nuclide_expression(
+        input_store.get("target_elem"), input_store.get("target_mass")
+    )
     projectile = input_store.get("inc_pt")
 
-    ## Convert into EXFOR expression
-    reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
-    target = x4style_nuclide_expression(elem, mass)
     queries = [
         exfor_indexes.c.target == target,
         exfor_indexes.c.arbitrary_data == False,
         exfor_indexes.c.projectile == projectile.upper(),
     ]
 
-    if obs_type in ["XS", "TH"]:
-        branch = input_store.get("branch")
-        level_num = input_store.get("level_num")
-
-        if branch:
-            queries.append(exfor_indexes.c.sf5 == branch.upper())
-
-        elif isinstance(level_num, int):
-            ## override reacton
-            reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend(
-                [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
-            )
-        elif input_store.get("excl_junk_switch") or not branch:
-            queries.append(exfor_indexes.c.sf5 == None)
-
-        queries.append(
-            exfor_indexes.c.process == reaction.replace("total", "tot").upper()
-        )
-
-        if not any(r in reaction for r in ("tot", "f")):
-            queries.extend(
-                [
-                    not_(exfor_indexes.c.sf4.endswith(f"-{suffix}"))
-                    for suffix in ("G", "M", "L", "M1", "M2")
-                ]
-            )
-
-    if obs_type == "RP":
-        rp_elem = input_store.get("rp_elem")
-        rp_mass = input_store.get("rp_mass")
-        # projectile = reaction.split(",")[0].upper()
-
-        # Convert format because the format is Mg-28, Sc-44-M in residual column
-        if rp_mass.endswith(("m", "M", "g", "G", "L", "M1", "M2", "m1", "m2")):
-            rp_mass_fmt = f"{rp_elem.capitalize()}-{get_number_from_string(rp_mass)}-{get_str_from_string(str(rp_mass)).upper()}"
-        else:
-            rp_mass_fmt = f"{rp_elem.capitalize()}-{rp_mass}"
-
-        queries.extend(
-            [
-                exfor_indexes.c.projectile == projectile,
-                exfor_indexes.c.residual == rp_mass_fmt,
-            ]
-        )
-
-    if obs_type == "FY":
-        branch = input_store.get("branch")
-        reac_product_fy = input_store.get("reac_product_fy")
-        mesurement_opt_fy = input_store.get("mesurement_opt_fy")
-
-        if branch:
-            queries.append(exfor_indexes.c.sf5.in_(tuple(fy_branch(branch.upper()))))
-
-        elif input_store.get("excl_junk_switch"):
-            queries.append(exfor_indexes.c.sf5 == None)
-
-        # Measurement options (A=mass, Z=charge)
-        # if mesurement_opt_fy == "A":
-        #     queries.append(exfor_indexes.c.sf4 == "MASS")
-
-        # elif mesurement_opt_fy == "Z":
-        #     queries.append(exfor_indexes.c.sf4 == "ELEM")
-
-        # # Fission product filtering
-        # if reac_product_fy:
-        #     queries.append(exfor_indexes.c.residual.in_(reac_product_fy))
-
-    if obs_type == "DA":
-        level_num = input_store.get("level_num")
-
-        if isinstance(level_num, int):
-            ## override reacton
-            reaction = convert_partial_reactionstr_to_inl(reaction)
-            queries.extend(
-                [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
-            )
+    extra_conditions, reaction = config["extra"](input_store, reaction)
+    queries.extend(extra_conditions)
 
     if input_store.get("excl_junk_switch"):
-        queries.extend(
-            [
-                exfor_indexes.c.sf7 == None,
-                exfor_indexes.c.sf8 == None,
-                exfor_indexes.c.sf9 == None,
-            ]
-        )
+        queries += [exfor_indexes.c.sf7 == None, exfor_indexes.c.sf9 == None]
+        if not config.get("fixed_sf8"):
+            # Skip sf8==None for obs types where sf8 carries a meaningful value
+            # (e.g. MACS: sf8='MXW', GG: sf8='AV') — already constrained by the builder.
+            queries.append(exfor_indexes.c.sf8 == None)
 
-    sf6 = pageparam_to_sf6.get(obs_type, "SIG")
-
-    # Excute query
-    queries.append(exfor_indexes.c.sf6 == sf6.upper())
+    queries.append(exfor_indexes.c.sf6 == config["sf6"].upper())
     stmt = select(exfor_indexes).where(and_(*queries))
-    # print(stmt.compile(dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}))
+
     with engines["exfor"].connect() as conn:
         result = conn.execute(stmt).fetchall()
+
     entries = (
         {
             row.entry_id: {
@@ -463,7 +502,7 @@ def data_query(input_store, entids):
             exfor_data.c.ddata,
         ]
     elif obs_type == "TH":
-        # thermal energy 限定
+        # restrict to thermal energy range (0.0253 eV)
         filters.append(exfor_data.c.en_inc >= 2.52e-2)  # in eV
         filters.append(exfor_data.c.en_inc <= 2.54e-2)  # in eV
         columns = [
@@ -473,8 +512,17 @@ def data_query(input_store, entids):
             exfor_data.c.data,
             exfor_data.c.ddata,
         ]
+    elif obs_type in ("RI", "MACS", "GG", "D"):
+        # Scalar observables: x = incident energy (or kT for MACS, resonance energy for GG/D)
+        columns = [
+            exfor_data.c.entry_id,
+            exfor_data.c.en_inc,
+            exfor_data.c.den_inc,
+            exfor_data.c.data,
+            exfor_data.c.ddata,
+        ]
     else:
-        # その他は全カラム取得（非推奨？）
+        # fallback: fetch all columns (not recommended)
         columns = [exfor_data]
 
     stmt = select(*columns).where(and_(*filters))
@@ -611,7 +659,6 @@ def join_reaction_bib():
         .order_by(exfor_bib.c.year.desc())
     )
 
-    # 2. そのままconnectionで実行
     with engines["exfor"].connect() as connection:
         df = pd.read_sql(
             sql=stmt,
@@ -646,7 +693,7 @@ def join_index_bib():
 
     with engines["exfor"].connect() as connection:
         df = pd.read_sql(
-            sql=all.statement,
+            sql=all,
             con=connection,
         )
 

@@ -17,6 +17,7 @@ import shutil
 import time
 import json
 import math
+import statistics
 from datetime import datetime, timedelta
 from .elem import elemtoz_nz
 
@@ -57,6 +58,10 @@ def get_number_from_string(x):
 def get_str_from_string(x):
     return re.sub(r"\d+", "", str(x))
 
+def get_stat_value(data):
+    mean = statistics.mean(data)
+    stdev = statistics.stdev(data)
+    return mean, stdev
 
 def split_by_number(x) -> list:
     ## retrun list for e.g.
