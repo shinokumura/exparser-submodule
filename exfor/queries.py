@@ -22,7 +22,6 @@ from exforparser.sql.models_core import (
     exfor_indexes,
 )
 
-from ..common import pageparam_to_sf6
 from ..utilities.util import (
     elemtoz_nz,
     get_number_from_string,
@@ -599,8 +598,8 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
 
     if lower and upper:
         # lower, upper = energy_range_conversion(energy_range)
-        queries.append(exfor_indexes.c.e_inc_min >= lower)
-        queries.append(exfor_indexes.c.e_inc_max <= upper)
+        queries.append(exfor_indexes.c.en_inc_min >= lower)
+        queries.append(exfor_indexes.c.en_inc_max <= upper)
 
     stmt = select(exfor_indexes).where(*queries)
 
@@ -626,7 +625,6 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
 ########  -------------------------------------- ##########
 ##         Join table for AGGrid
 ########  -------------------------------------- ##########
-from sqlalchemy import select, func
 
 def join_reaction_bib():
     stmt = (
@@ -647,8 +645,8 @@ def join_reaction_bib():
             exfor_bib.c.year,
             exfor_bib.c.main_facility_institute,
             exfor_bib.c.main_facility_type,
-            func.min(exfor_indexes.c.e_inc_min).label("e_inc_min"),
-            func.max(exfor_indexes.c.e_inc_max).label("e_inc_max"),
+            func.min(exfor_indexes.c.en_inc_min).label("en_inc_min"),
+            func.max(exfor_indexes.c.en_inc_max).label("en_inc_max"),
         )
         .select_from(
             exfor_reactions
@@ -675,8 +673,8 @@ def join_index_bib():
             exfor_indexes.c.target,
             exfor_indexes.c.process,
             exfor_indexes.c.residual,
-            exfor_indexes.c.e_inc_min,
-            exfor_indexes.c.e_inc_max,
+            exfor_indexes.c.en_inc_min,
+            exfor_indexes.c.en_inc_max,
             exfor_indexes.c.sf5,
             exfor_indexes.c.sf6,
             exfor_indexes.c.sf7,
