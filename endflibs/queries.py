@@ -26,49 +26,59 @@ from ..utilities.util import libstyle_nuclide_expression
 ######## -------------------------------------- ########
 #    Queries for endftables
 ######## -------------------------------------- ########
+
+def _lib_cond_mt(input_store: dict) -> list:
+    """Extra conditions for obs types that support MT filtering (XS, TH, DA, FY)."""
+    mt = input_store.get("mt")
+    return [endf_reactions.c.mt == int(mt)] if mt else []
+
+
+def _lib_cond_rp(input_store: dict) -> list:
+    """Extra conditions for residual product (RP) queries."""
+    residual = libstyle_nuclide_expression(
+        input_store.get("rp_elem"), input_store.get("rp_mass")
+    )
+    return [endf_reactions.c.residual == residual]
+
+
+# Maps the page-level obs_type key to the corresponding endf_reactions.obs_type
+# column value and a callable that returns any additional query conditions.
+# To add a new observable: add one entry here and implement its condition builder.
+LIB_OBS_TYPE_CONFIG: dict = {
+    "XS":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
+    "TH":   {"db_obs_type": "thermal",  "extra": _lib_cond_mt},  # thermal: same table as XS, energy filter applied in data query
+    "RI":   {"db_obs_type": "ri",       "extra": _lib_cond_mt},
+    "DA":   {"db_obs_type": "angle",    "extra": _lib_cond_mt},
+    "FY":   {"db_obs_type": "fy",       "extra": _lib_cond_mt},
+    "RP":   {"db_obs_type": "residual", "extra": _lib_cond_rp},
+    "DE":   {"db_obs_type": "energy",   "extra": lambda _: []},
+    # These observables are not in the endf_reactions table — no evaluated lib data available
+    "MACS": {"db_obs_type": "macs", "extra": lambda _: []},
+    "GG":   {"db_obs_type": "resonance_param", "extra": lambda _: []},
+    "D":    {"db_obs_type": "resonance", "extra": lambda _: []},
+}
+
+
 def lib_index_query(input_store):
-
     obs_type = input_store.get("obs_type").upper()
-    elem = input_store.get("target_elem")
-    mass = input_store.get("target_mass")
-    reaction = input_store.get("reaction")
+    config = LIB_OBS_TYPE_CONFIG[obs_type]
 
-    target = libstyle_nuclide_expression(elem, mass)
+    if config["db_obs_type"] is None:
+        return {}  # no evaluated library data for this observable type
 
+    target = libstyle_nuclide_expression(
+        input_store.get("target_elem"), input_store.get("target_mass")
+    )
     queries = [
         endf_reactions.c.target == target,
-        endf_reactions.c.projectile == reaction.split(",")[0].lower(),
+        endf_reactions.c.projectile == input_store.get("reaction").split(",")[0].lower(),
+        endf_reactions.c.obs_type == config["db_obs_type"],
+        *config["extra"](input_store),
     ]
-
-    if obs_type in ("XS", "DA", "FY", "TH"):
-        if input_store.get("mt"):
-            mt = input_store.get("mt")
-            queries.append(endf_reactions.c.mt == int(mt))
-
-    if obs_type == "TH":
-        obs_type = "xs"
-
-    if obs_type == "RP":
-        obs_type = "residual"
-        rp_elem = input_store.get("rp_elem")
-        rp_mass = input_store.get("rp_mass")
-        residual = libstyle_nuclide_expression(rp_elem, rp_mass)
-        queries.append(endf_reactions.c.residual == residual)
-
-    if obs_type == "DA":
-        obs_type = "angle"
-        # queries.append(endf_reactions.c.process == reaction.split(",")[1].upper())
-
-    if obs_type == "DE":
-        obs_type = "energy"
-        # queries.append(endf_reactions.c.process == reaction.split(",")[1].upper())
-
-    queries.append(endf_reactions.c.obs_type == obs_type.lower())
 
     stmt = select(endf_reactions.c.reaction_id, endf_reactions.c.evaluation).where(
         and_(*queries)
     )
-
     with engines["endftables"].connect() as conn:
         results = conn.execute(stmt).fetchall()
 
