@@ -32,6 +32,7 @@ def open_json(file):
 
 LIB_LIST_MAX = {
     "tendl.2023": "TENDL-2023-update",
+    "tendl.2025": "TENDL-2025",
     # "tendl.2021",
     "endfb8.1": "ENDF/B-VIII.0",
     "eaf.2010" : "EAF-2010",  # European Activation File
@@ -55,17 +56,19 @@ pageparam_to_sf6 = {
     "DA": "DA",
     "DE": "DE",
     "TRN": "TRN",
+    "DDX": "DA/DE",
 }
 
 
 pageparam_to_endftables_obs_type = {
-    "XS": "xs", 
-    "TH": "xs", 
-    "RP": "residual", 
-    "FY": "fission", 
+    "XS": "xs",
+    "TH": "xs",
+    "RP": "residual",
+    "FY": "fission",
     "DA": "angle",
     "DE": "energy",
     "TRN": None,
+    "DDX": None,
 }
 
 
@@ -248,3 +251,27 @@ def generate_link_of_files(files):
         # flinks.append(html.Br())
 
     return flinks
+
+
+def sanitize_for_js(obj):
+    """
+    sanitize strings for JavaScript
+    """
+    if isinstance(obj, dict):
+        return {
+            str(k): sanitize_for_js(v)
+            for k, v in obj.items()
+        }
+
+    elif isinstance(obj, list):
+        return [sanitize_for_js(v) for v in obj]
+
+    elif isinstance(obj, str):
+
+        return (
+            obj
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+        )
+
+    return obj

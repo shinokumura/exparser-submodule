@@ -12,17 +12,23 @@
 
 from .util import get_str_from_string
 
+# ------------------------------------------------------------------------------
+# Incident Energy Grouping in MeV
+# ------------------------------------------------------------------------------
+ENERGIES = {
+    "Thermal": [2.50e-8, 2.55e-8],
+    "Fast": [0.1, 0.6],
+    "14MeV": [13.0, 15.0],
+    "eV": [1.0e-8, 1.0e-3],
+    "keV": [1.0e-3, 1.0],
+    "MeV": [1.0, 1.0e3],
+    "All": [0, 1e9],
+}
 
-## Previous mf3.json in MT_PATH_JSON
-## SF3 in EXFOR reaction code mapping to MT number
-## temp = {    "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None},
-# "SCT": {"mt": None, "reaction": "elastic scattering plus inelastic scattering", "sf5-8": None},
-# "X": {"mt": None, "reaction": "Production cross section", "sf5-8": None},
-# "N": {"mt": "2", "reaction": "(n,inelas.)", "sf5-8": "SIG"},}
 
-exfor_sf3_dict = {}
-
-
+# ------------------------------------------------------------------------------
+# SF3 (reaction process/outgoing particle) to MT number
+# ------------------------------------------------------------------------------
 sf3_dict = {
     "0": {"mt": None, "reaction": "resonance energy", "sf5-8": None, "endf": False},
     "SCT": {
@@ -141,6 +147,143 @@ sf3_dict = {
 }
 
 
+## MF Description
+mf_dict = {
+    "MF1": {
+        "description": "General information",
+        "default_mt": "451",
+        "default_ops": "showheaders",
+        "x_axis": "",
+    },
+    "MF2": {
+        "description": "Resonance parameter data",
+        "default_mt": "151",
+        "default_ops": "reconstruct",
+    },
+    "MF3": {
+        "description": "Reaction cross sections",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF4": {
+        "description": "Angular distributions for emitted particles",
+        "default_mt": "2",
+        "default_ops": "table",
+    },
+    "MF5": {
+        "description": "Energy distributions for emitted particles",
+        "default_mt": "16",
+        "default_ops": "table",
+    },
+    "MF6": {
+        "description": "Energy-angle distributions for emitted particles",
+        "default_mt": "16",
+        "default_ops": "table",
+    },
+    "MF7": {
+        "description": "Thermal neutron scattering law data",
+        "default_mt": "16",
+        "default_ops": "table",
+    },
+    "MF8": {
+        "description": "Radioactivity and fission-product yield data",
+        "default_mt": "459",
+        "default_ops": "table",
+    },
+    "MF9": {
+        "description": "Multiplicities for radioactive nuclide production",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF10": {
+        "description": "Cross sections for radioactive nuclide production",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF12": {
+        "description": "Multiplicities for photon production",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF13": {
+        "description": "Cross sections for photon production",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF14": {
+        "description": "Angular distributions for photon production",
+        "default_mt": "51",
+        "default_ops": "table",
+    },
+    "MF15": {
+        "description": "Energy distributions for photon production",
+        "default_mt": "3",
+        "default_ops": "table",
+    },
+    "MF23": {
+        "description": "Photo- or electro-atomic interaction cross sections",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF26": {
+        "description": "Electro-atomic angle and energy distribution",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF27": {
+        "description": "Atomic form factors or scattering functions for photo-atomic interactions",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF28": {
+        "description": "Atomic relaxation data",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF30": {
+        "description": "Data covariances obtained from parameter covariances and sensitivities",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF31": {
+        "description": "Data covariances for nu(bar)",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF32": {
+        "description": "Data covariances for resonance parameters",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF33": {
+        "description": "Data covariances for reaction cross sections",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF34": {
+        "description": "Data covariances for angular distributions",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF35": {
+        "description": "Data covariances for energy distributions",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF39": {
+        "description": "Data covariances for radionuclide production yields",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+    "MF40": {
+        "description": "Data covariances for radionuclide production cross sections",
+        "default_mt": "1",
+        "default_ops": "table",
+    },
+}
+
+
+
 mt_range = {
     "N": list(range(50, 93)),  # up to 92
     "P": list(range(600, 650)),  # up to 649
@@ -150,6 +293,80 @@ mt_range = {
     "A": list(range(800, 850)),  # up to 849
     "G": [102],
 }  # not sure about photon induced case
+
+
+# ENDF-6 MT range descriptions: list of (start, end, description) tuples.
+# Used for human-readable labels in the archive viewer and elsewhere.
+mt_dict = [
+    (1, 1, "Neutron total cross sections"),
+    (2, 2, "Elastic scattering cross section for incident particles"),
+    (3, 3, "Nonelastic neutron cross section"),
+    (4, 4, "Inelastic scattering, Sum of MT = 50 - 91"),
+    (5, 5, "Sum of all reactions not given explicitly in another MT number"),
+    (11, 11, "(z, 2n d)"),
+    (16, 16, "(z, 2n)"),
+    (17, 17, "(z, 3n)"),
+    (18, 18, "(z, fission)"),
+    (19, 19, "(n, f) First-chance neutron-induced fission"),
+    (20, 20, "(n, n f) Second-chance neutron-induced fission"),
+    (21, 21, "(n, 2n f) Third-chance neutron-induced fission"),
+    (22, 22, "(z, n alpha)"),
+    (23, 23, "(n, n3 alpha)"),
+    (24, 24, "(z, 2n alpha)"),
+    (25, 25, "(z, 3n alpha)"),
+    (28, 28, "(z, n p)"),
+    (29, 29, "(z, n 2alpha)"),
+    (30, 30, "(z, 2n 2alpha)"),
+    (32, 32, "(z, n d)"),
+    (33, 33, "(z, n t)"),
+    (34, 34, "(z, n 3He)"),
+    (35, 35, "(z, n d 2alpha)"),
+    (36, 36, "(z, n t 2alpha)"),
+    (37, 37, "(z, 4n)"),
+    (38, 38, "(n, 3n f) Fourth-chance fission cross section"),
+    (41, 41, "(z, 2n p)"),
+    (42, 42, "(z, 3n p)"),
+    (44, 44, "(z, n 2p)"),
+    (45, 45, "(z, n p alpha)"),
+    (50, 50, "(y, n0) Production of a neutron, leaving the residual nucleus in the ground state"),
+    (51, 90, "(z, nx) Production of a neutron, with residual in the x-th excited state"),
+    (91, 91, "(z, nc) Production of a neutron in the continuum"),
+    (102, 102, "(z, gamma) Radiative capture"),
+    (103, 103, "(z, p)"),
+    (104, 104, "(z, d)"),
+    (105, 105, "(z, t)"),
+    (106, 106, "(z, 3He)"),
+    (107, 107, "(z, alpha)"),
+    (108, 108, "(z, 2alpha)"),
+    (109, 109, "(z, 3alpha)"),
+    (111, 111, "(z,2p)"),
+    (112, 112, "(z, p alpha)"),
+    (113, 113, "(z, t 2alpha)"),
+    (114, 114, "(z, d 2alpha)"),
+    (115, 115, "(z, p d)"),
+    (116, 116, "(z, p t)"),
+    (117, 117, "(z, d alpha)"),
+    (151, 151, "Resonance parameters"),
+    (451, 451, "Heading or title information"),
+    (452, 452, "nu_T, average total (prompt plus delayed) number of neutrons released per fission"),
+    (454, 454, "Independent fission product yield data"),
+    (455, 455, "nu_d, average number of delayed neutrons released per fission"),
+    (456, 456, "nu_p, average number of prompt neutrons released per fission"),
+    (457, 457, "Radioactive decay data"),
+    (458, 458, "Energy release in fission for incident neutrons"),
+    (459, 459, "Cumulative fission product yield data"),
+    (460, 460, "Delayed fission photons"),
+    (600, 648, "(z, p_x) Production of a proton, with residual in the x-th excited state"),
+    (649, 649, "(z, p_c) Production of a proton in the continuum"),
+    (650, 698, "(z, d_x) Production of a deuteron, with residual in the x-th excited state"),
+    (699, 699, "(z, d_c) Production of a deuteron in the continuum"),
+    (700, 748, "(z, t_x) Production of a triton, with residual in the x-th excited state"),
+    (749, 749, "(z, t_c) Production of a triton in the continuum"),
+    (750, 798, "(z, 3He_x) Production of a 3He, with residual in the x-th excited state"),
+    (799, 799, "(z, 3He_c) Production of a 3He in the continuum"),
+    (800, 848, "(z, alpha_x) Production of an alpha particle, with residual in the x-th excited state"),
+    (849, 849, "(z, alpha_c) Production of an alpha in the continuum"),
+]
 
 
 mt_list = {
@@ -317,35 +534,7 @@ MT_BRANCH_LIST_FY = {
 }
 
 
-sf6_to_mf = {
-    "NU": "1",
-    "WID": "2",
-    "ARE": "2",
-    "D": "2",
-    "EN": "2",
-    "J": "2",
-    "SIG": "3",
-    "DA": "4",
-    "DE": "5",
-    "FY": "8",
-    "DA/DE": "6",
-}
-
-
-sf6_to_dir = {
-    "SIG": "xs",
-    "DA": "angle",
-    "DE": "energy",
-    "NU": "neutrons",
-    "DL": "neutrons",
-    "NU/DE": "neutrons/energy",
-    "FY": "fission/yield",
-    "FY/DE": "fission/energy",
-    "KE": "kinetic_energy",
-    "AKE": "kinetic_energy/average",
-}
-
-resonance_parameter_sf6 = ["WID", "WID/STR", "WID/RED", "ARE", "ETA", "ALF"]
+from .obs_types import sf6_to_mf, sf6_to_dir, resonance_parameter_sf6
 
 
 
@@ -367,7 +556,7 @@ def reaction_list(projectile):
     if not projectile:
         return sf3_dict
 
-    assert len(projectile) == 1
+    # assert len(projectile) == 1
 
     all_reactions = {
         ("N" if (projectile.upper() != "N" and k == "INL" and i.get("endf")) else k): i

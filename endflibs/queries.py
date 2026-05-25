@@ -1,7 +1,8 @@
 import sys
 import importlib
+from functools import lru_cache
 import pandas as pd
-from sqlalchemy import select, and_, or_, distinct
+from sqlalchemy import select, and_, distinct, text
 
 try:
     from config import engines
@@ -20,69 +21,161 @@ from endftables_sql.scripts.models_core import (
     resonancetable_data,
 )
 from ..utilities.util import libstyle_nuclide_expression
+from ..utilities.obs_types import SCALAR_OBS
 
 
 
 ######## -------------------------------------- ########
-#    Queries for endftables
+#    Index queries for endftables
 ######## -------------------------------------- ########
 
 def _lib_cond_mt(input_store: dict) -> list:
-    """Extra conditions for obs types that support MT filtering (XS, TH, DA, FY)."""
+    """Extra conditions for obs types that support MT filtering (XS, TH, DA, FY).
+
+    For level-specific inelastic reactions (e.g. n,inl1 / n,inl2) get_mt()
+    returns None because the level suffix is not in the reaction table.  Map
+    level_num → MT via the ENDF convention MT = 50 + level_num so the library
+    query stays narrow (MT 51 for level 1, MT 52 for level 2, …).
+    """
     mt = input_store.get("mt")
+    if mt is None:
+        level_num = input_store.get("level_num")
+        if level_num is not None:
+            mt = 50 + int(level_num)
     return [endf_reactions.c.mt == int(mt)] if mt else []
 
 
-def _lib_cond_rp(input_store: dict) -> list:
+def _lib_cond_residual(input_store: dict) -> list:
     """Extra conditions for residual product (RP) queries."""
-    residual = libstyle_nuclide_expression(
-        input_store.get("rp_elem"), input_store.get("rp_mass")
-    )
-    return [endf_reactions.c.residual == residual]
+    if input_store.get("rp_elem") and input_store.get("rp_mass"):
+        residual = libstyle_nuclide_expression(
+            input_store.get("rp_elem"), input_store.get("rp_mass")
+        )
+        return [endf_reactions.c.residual == residual]
+    else:
+        return []
+
+
+# def _lib_cond_resonance(input_store: dict) -> list:
+#     """Extra conditions for resonance parameters query."""
+#     [endf_reactions.c.residual == residual]
+#     return 
 
 
 # Maps the page-level obs_type key to the corresponding endf_reactions.obs_type
 # column value and a callable that returns any additional query conditions.
-# To add a new observable: add one entry here and implement its condition builder.
-LIB_OBS_TYPE_CONFIG: dict = {
+# db_obs_type=None means no endf_reactions entry — use resonancetable_data instead.
+LIB_OBS_TYPE_CONDITION: dict = {
     "XS":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
-    "TH":   {"db_obs_type": "thermal",  "extra": _lib_cond_mt},  # thermal: same table as XS, energy filter applied in data query
-    "RI":   {"db_obs_type": "ri",       "extra": _lib_cond_mt},
+    "RP":   {"db_obs_type": "residual", "extra": _lib_cond_residual},
     "DA":   {"db_obs_type": "angle",    "extra": _lib_cond_mt},
     "FY":   {"db_obs_type": "fy",       "extra": _lib_cond_mt},
-    "RP":   {"db_obs_type": "residual", "extra": _lib_cond_rp},
     "DE":   {"db_obs_type": "energy",   "extra": lambda _: []},
-    # These observables are not in the endf_reactions table — no evaluated lib data available
-    "MACS": {"db_obs_type": "macs", "extra": lambda _: []},
-    "GG":   {"db_obs_type": "resonance_param", "extra": lambda _: []},
-    "D":    {"db_obs_type": "resonance", "extra": lambda _: []},
+    # These use resonancetable_data, not endf_reactions → db_obs_type=None
+    "RESONANCE":   {"db_obs_type": None, "extra": lambda _: []},
+    "TH":   {"db_obs_type": "thermal",  "extra": _lib_cond_residual},
+    "MACS": {"db_obs_type": "macs",     "extra": lambda _: []},
+    "RI":   {"db_obs_type": "integral", "extra": lambda _: []},
+    # Wildcard patterns — matched with LIKE in lib_index_query
+    # Per-quantity entries (exact match)
+    "D0":   {"db_obs_type": "D0",       "extra": lambda _: []},
+    "D1":   {"db_obs_type": "D1",       "extra": lambda _: []},
+    "D2":   {"db_obs_type": "D2",       "extra": lambda _: []},
+    "S0":   {"db_obs_type": "S0",       "extra": lambda _: []},
+    "S1":   {"db_obs_type": "S1",       "extra": lambda _: []},
+    "GG0":  {"db_obs_type": "gamgam0",  "extra": lambda _: []},
+    "GG1":  {"db_obs_type": "gamgam1",  "extra": lambda _: []},
+    "RAD":  {"db_obs_type": "R",        "extra": lambda _: []},
+    "STF":  {"db_obs_type": "STF",      "extra": lambda _: []},
 }
 
 
 def lib_index_query(input_store):
-    obs_type = input_store.get("obs_type").upper()
-    config = LIB_OBS_TYPE_CONFIG[obs_type]
+    obs_type = input_store.get("obs_type", "").upper()
+    condition = LIB_OBS_TYPE_CONDITION.get(obs_type)
 
-    if config["db_obs_type"] is None:
-        return {}  # no evaluated library data for this observable type
-
+    projectile = input_store.get("inc_pt", "").lower() if input_store.get("inc_pt").upper() != "HE3" else "h"
+    process = input_store.get("reaction", "").split(",")[1]
     target = libstyle_nuclide_expression(
         input_store.get("target_elem"), input_store.get("target_mass")
     )
+
+    if condition is None or condition["db_obs_type"] is None:
+        return {}  # no endf_reactions entry for this obs_type — use resonancetable_data instead
+
     queries = [
         endf_reactions.c.target == target,
-        endf_reactions.c.projectile == input_store.get("reaction").split(",")[0].lower(),
-        endf_reactions.c.obs_type == config["db_obs_type"],
-        *config["extra"](input_store),
+        endf_reactions.c.projectile == projectile,
+        endf_reactions.c.obs_type == condition["db_obs_type"],
+        *condition["extra"](input_store),
     ]
 
-    stmt = select(endf_reactions.c.reaction_id, endf_reactions.c.evaluation).where(
-        and_(*queries)
+    if obs_type in {"TH", "MACS", "RI"}:
+        queries += [endf_reactions.c.process == process]
+
+    if obs_type in SCALAR_OBS:
+        stmt = select(endf_reactions.c.reaction_id, 
+                      endf_reactions.c.evaluation, 
+                      endf_reactions.c.residual, 
+                      endf_reactions.c.year).where(and_(*queries))
+
+        with engines["endftables"].connect() as conn:
+            results = conn.execute(stmt).fetchall()
+
+        return {row.reaction_id:{
+            "evaluation": row.evaluation, 
+            "residual": row.residual, 
+            "year": row.year
+            } for row in results}
+    
+    else:
+        stmt = select(endf_reactions.c.reaction_id, 
+                      endf_reactions.c.evaluation).where(
+            and_(*queries)
+        )
+        with engines["endftables"].connect() as conn:
+            results = conn.execute(stmt).fetchall()
+        return {row.reaction_id: row.evaluation for row in results}
+
+
+@lru_cache(maxsize=2048)
+def lib_available_reactions_query(obs_type, elem, mass, projectile):
+    """Return evaluated-library reaction identifiers available for one target.
+
+    This intentionally reads only the compact endf_reactions index and returns
+    distinct process/MT pairs so the reaction dropdown can be annotated without
+    issuing one query per option.
+    """
+    obs_type = (obs_type or "").upper()
+    condition = LIB_OBS_TYPE_CONDITION.get(obs_type)
+    if condition is None or condition["db_obs_type"] is None:
+        return []
+
+    target = libstyle_nuclide_expression(elem, mass)
+    projectile = "h" if (projectile or "").upper() == "HE3" else (projectile or "").lower()
+
+    stmt = (
+        select(
+            endf_reactions.c.process,
+            endf_reactions.c.mt,
+        )
+        .distinct()
+        .where(
+            and_(
+                endf_reactions.c.target == target,
+                endf_reactions.c.projectile == projectile,
+                endf_reactions.c.obs_type == condition["db_obs_type"],
+            )
+        )
     )
+
     with engines["endftables"].connect() as conn:
         results = conn.execute(stmt).fetchall()
 
-    return {row.reaction_id: row.evaluation for row in results}
+    return [
+        {"process": row.process, "mt": row.mt}
+        for row in results
+    ]
 
 
 def lib_residual_nuclide_list(elem, mass, inc_pt):
@@ -100,12 +193,15 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
     return [row.residual for row in results] if results else []
 
 
+
+######## -------------------------------------- ########
+#    Data queries for endftables
+######## -------------------------------------- ########
+
 def lib_data_query(input_store, ids):
     obs_type = input_store["obs_type"].upper()
     if obs_type == "XS":
         return lib_xs_data_query(ids, thermal=False)
-    elif obs_type == "TH":
-        return lib_xs_data_query(ids, thermal=True)
     elif obs_type == "FY":
         return lib_fy_data_query(ids)
     elif obs_type == "DA":
@@ -113,6 +209,10 @@ def lib_data_query(input_store, ids):
     elif obs_type == "RP":
         inc_pt = input_store["reaction"].split(",")[0].lower()
         return lib_residual_data_query(inc_pt, ids)
+    elif obs_type in SCALAR_OBS:
+        return lib_resonance_data_query(ids)
+
+    return pd.DataFrame()
 
 
 def lib_xs_data_query(ids, thermal):
@@ -129,6 +229,64 @@ def lib_xs_data_query(ids, thermal):
 
 def lib_da_data_query(ids):
     stmt = select(endf_angle_data).where(endf_angle_data.c.reaction_id.in_(ids))
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
+        )
+    return df
+
+
+def lib_da_distinct_query(ids):
+    """Return distinct (reaction_id, en_inc, angle) without data values.
+    Used to populate slicer dropdowns without loading the full dataset."""
+    stmt = (
+        select(
+            endf_angle_data.c.reaction_id,
+            endf_angle_data.c.en_inc,
+            endf_angle_data.c.angle,
+        )
+        .where(endf_angle_data.c.reaction_id.in_(ids))
+        .distinct()
+    )
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(),
+            columns=["reaction_id", "en_inc", "angle"],
+        )
+    return df
+
+
+def lib_da_data_query_at_energy(ids, en_target):
+    """Return all angle rows exactly at the selected incident energy."""
+    if en_target is None:
+        return pd.DataFrame()
+    t = float(en_target)
+    tol = max(abs(t) * 1e-10, 1e-12)
+    stmt = select(endf_angle_data).where(
+        and_(
+            endf_angle_data.c.reaction_id.in_(ids),
+            endf_angle_data.c.en_inc.between(t - tol, t + tol),
+        )
+    )
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
+        )
+    return df
+
+
+def lib_da_data_query_at_angle(ids, angle_target):
+    """Return all energy rows exactly at the selected angle."""
+    if angle_target is None:
+        return pd.DataFrame()
+    t = float(angle_target)
+    tol = max(abs(t) * 1e-10, 1e-12)
+    stmt = select(endf_angle_data).where(
+        and_(
+            endf_angle_data.c.reaction_id.in_(ids),
+            endf_angle_data.c.angle.between(t - tol, t + tol),
+        )
+    )
     with engines["endftables"].connect() as conn:
         df = pd.DataFrame(
             conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
@@ -155,6 +313,21 @@ def lib_fy_data_query(ids):
     return df
 
 
+def lib_resonance_data_query(ids):
+    stmt = select(
+        resonancetable_data.c.reaction_id,
+        resonancetable_data.c.value,
+        resonancetable_data.c.dvalue,
+    ).where(resonancetable_data.c.reaction_id.in_(ids))
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
+        )
+    return df
+
+
+
+
 ######## -------------------------------------- ########
 #    Queries for multiple ENDF-6 file access
 ######## -------------------------------------- ########
@@ -169,7 +342,7 @@ def get_unique_target():
 
 
 def get_unique_proces():
-    stmt = select(distinct(endf_reactions.c.process)).order_by(endf_reactions.c.target)
+    stmt = select(distinct(endf_reactions.c.process)).order_by(endf_reactions.c.process)
     with engines["endftables"].connect() as conn:
         result = conn.execute(stmt)
         targets = [row[0] for row in result.fetchall()]
@@ -443,3 +616,30 @@ def resonancetable_quantity_list(data_type: str) -> list[str]:
     with engines["endftables"].connect() as conn:
         rows = conn.execute(stmt).fetchall()
     return [r[0] for r in rows]
+
+
+########  -------------------------------------- ##########
+##         Index creation
+########  -------------------------------------- ##########
+
+def ensure_indexes():
+    """Create missing indexes on the endftables database.
+
+    Safe to call repeatedly — every statement uses IF NOT EXISTS.
+    Call once at application startup.
+    """
+    ddl = [
+        # reaction_id FK in all data tables — used in every IN() data fetch.
+        # endf_reactions already has comprehensive indexes in the DB (idx_endf_reactions_*).
+        "CREATE INDEX IF NOT EXISTS ix_endf_xs_data_rid         ON endf_xs_data (reaction_id)",
+        "CREATE INDEX IF NOT EXISTS ix_endf_angle_data_rid      ON endf_angle_data (reaction_id)",
+        "CREATE INDEX IF NOT EXISTS ix_endf_residual_data_rid   ON endf_residual_data (reaction_id)",
+        "CREATE INDEX IF NOT EXISTS ix_endf_n_residual_data_rid ON endf_n_residual_data (reaction_id)",
+        "CREATE INDEX IF NOT EXISTS ix_endf_fy_data_rid         ON endf_fy_data (reaction_id)",
+        # resonancetable_data — only quantity exists as a filterable column in the live DB
+        "CREATE INDEX IF NOT EXISTS ix_resonancetable_quantity  ON resonancetable_data (quantity)",
+    ]
+    with engines["endftables"].connect() as conn:
+        for stmt in ddl:
+            conn.execute(text(stmt))
+        conn.commit()

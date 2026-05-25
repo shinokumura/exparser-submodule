@@ -160,11 +160,11 @@ plotting/
 test/
 examples/
 .vscode/
+.claude/
 _*
-requirements_old.txt
+config.py
 
 # other packages
 exfor_dictionary/
 endflib_sql/
-sql/
-uninstall.txt
+

@@ -18,7 +18,7 @@ import time
 import json
 import math
 import statistics
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from .elem import elemtoz_nz
 
 
@@ -144,7 +144,7 @@ def print_process_time(start_time=None):
 
 
 current_year = datetime.now().year
-
+today = date.today()
 
 def cos_to_angle_degrees(cos_value):
     if not -1.0 <= cos_value <= 1.0:
