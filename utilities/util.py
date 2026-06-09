@@ -218,14 +218,80 @@ def convert_angle_cm_lab(theta_deg, direction="CM_to_LAB", gamma=0.5):
 
     if direction == "CM_to_LAB":
         cos_lab = (cos_theta + gamma) / (1 + gamma * cos_theta)
-        theta_out_rad = np.arccos(cos_lab)
+        theta_out_rad = np.arccos(np.clip(cos_lab, -1.0, 1.0))
     elif direction == "LAB_to_CM":
         cos_cm = (cos_theta - gamma) / (1 - gamma * cos_theta)
-        theta_out_rad = np.arccos(cos_cm)
+        theta_out_rad = np.arccos(np.clip(cos_cm, -1.0, 1.0))
     else:
         raise ValueError("direction must be 'CM_to_LAB' or 'LAB_to_CM'")
 
     return np.degrees(theta_out_rad)
+
+
+# ---------------------------------------------------------------------------
+# Kinematic helpers for CM ↔ Lab frame conversions
+# ---------------------------------------------------------------------------
+
+_PROJECTILE_MASS = {
+    "N": 1, "P": 1, "D": 2, "T": 3, "A": 4,
+    "HE3": 3, "3HE": 3, "HE6": 6, "LI6": 6, "LI7": 7,
+    "G": 0, "0": 0,
+}
+
+
+def _parse_projectile_mass(process: str):
+    """Return mass number of the projectile from EXFOR process string (e.g. 'N,G' or 'A,2N')."""
+    proj = process.split(",")[0].strip().upper()
+    if proj in _PROJECTILE_MASS:
+        return _PROJECTILE_MASS[proj]
+    # Heavy-ion notation like "2-HE-4" or "3-LI-7"
+    parts = proj.split("-")
+    if len(parts) >= 3:
+        try:
+            return int(parts[2])
+        except ValueError:
+            pass
+    return None
+
+
+def _parse_target_mass(target: str):
+    """Return mass number A from EXFOR target notation '82-PB-208'. Returns None for natural (A=0)."""
+    parts = target.split("-")
+    if len(parts) >= 3:
+        try:
+            a = int(parts[2])
+            return a if a > 0 else None
+        except ValueError:
+            pass
+    return None
+
+
+def get_cm_to_lab_factor(react_dict: dict):
+    """
+    Return the kinematic factor (m_a + m_A)/m_A for EN-CM → E_lab conversion.
+
+    Uses the non-relativistic relationship E_lab = E_cm * (m_a + m_A)/m_A.
+    Returns None when masses cannot be determined (natural target or unknown projectile).
+    """
+    m_a = _parse_projectile_mass(react_dict.get("process", ""))
+    m_A = _parse_target_mass(react_dict.get("target", ""))
+    if m_a is not None and m_A is not None:
+        return (m_a + m_A) / m_A
+    return None
+
+
+def get_cm_gamma(react_dict: dict) -> float:
+    """
+    Estimate γ = m_a/m_A for CM→Lab angle conversion (non-relativistic, Q≈0 approximation).
+
+    γ = v_cm / v_b_cm ≈ m_a/m_A for elastic scattering off a heavy target.
+    Falls back to 0.5 when masses are unavailable.
+    """
+    m_a = _parse_projectile_mass(react_dict.get("process", ""))
+    m_A = _parse_target_mass(react_dict.get("target", ""))
+    if m_a is not None and m_A is not None and m_A > 0:
+        return m_a / m_A
+    return 0.5
 
 
 def x4style_nuclide_expression(elem, mass):

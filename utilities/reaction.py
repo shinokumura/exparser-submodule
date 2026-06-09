@@ -124,7 +124,7 @@ sf3_dict = {
     "3N+HE3": {"mt": "177", "reaction": "(n,3nh)", "sf5-8": None, "endf": True},
     "4N+HE3": {"mt": "178", "reaction": "(n,4nh)", "sf5-8": None, "endf": True},
     "3N+2P": {"mt": "179", "reaction": "(n,3n2p)", "sf5-8": None, "endf": True},
-    "3N+2": {"mt": "180", "reaction": "(n,3n2a)", "sf5-8": None, "endf": True},
+    "3N+2A": {"mt": "180", "reaction": "(n,3n2a)", "sf5-8": None, "endf": True},
     "3N+P+A": {"mt": "181", "reaction": "(n,3npa)", "sf5-8": None, "endf": True},
     "D+T": {"mt": "182", "reaction": "(n,dt)", "sf5-8": None, "endf": True},
     "N+P+D": {"mt": "183", "reaction": "(n,n'pd)", "sf5-8": None, "endf": True},

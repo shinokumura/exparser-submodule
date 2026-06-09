@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import importlib
+import json
 import pandas as pd
 from functools import lru_cache
 from collections import OrderedDict
@@ -20,11 +21,17 @@ from exforparser.sql.models_core import (
     exfor_bib,
     exfor_reactions,
     exfor_data,
+    exfor_native_data,
     exfor_indexes,
     exfor_institute_geo,
     exfor_entry_dois,
     exfor_histories,
 )
+try:
+    from exforparser.sql.stored_insert import ensure_exfor_data_frame_columns
+except ImportError:
+    def ensure_exfor_data_frame_columns(connection):
+        return None
 
 from ..utilities.util import (
     elemtoz_nz,
@@ -67,6 +74,53 @@ def get_exfor_indexes_table():
     with engines["exfor"].connect() as connection:
         df = pd.read_sql_table("exfor_indexes", connection)
         return df
+
+
+def _format_native_values(values):
+    if values is None:
+        return ""
+    try:
+        parsed = json.loads(values)
+    except (TypeError, json.JSONDecodeError):
+        parsed = values
+    if isinstance(parsed, list):
+        return ", ".join(str(value) for value in parsed if value is not None)
+    return str(parsed)
+
+
+def trn_thickness_query(entry_ids):
+    """Return raw EXFOR THICKNESS values with original units for TRN entries."""
+    entry_ids = tuple(entry_id for entry_id in entry_ids if entry_id)
+    if not entry_ids:
+        return {}
+
+    stmt = (
+        select(
+            exfor_native_data.c.entry_id,
+            exfor_native_data.c.unit,
+            exfor_native_data.c.data,
+        )
+        .where(
+            and_(
+                exfor_native_data.c.entry_id.in_(entry_ids),
+                exfor_native_data.c.head == "THICKNESS",
+            )
+        )
+        .order_by(exfor_native_data.c.entry_id, exfor_native_data.c.column_index)
+    )
+
+    with engines["exfor"].connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+
+    out = {}
+    for row in rows:
+        values = _format_native_values(row.data)
+        if not values:
+            continue
+        label = f"{values} {row.unit}".strip()
+        out.setdefault(row.entry_id, []).append(label)
+
+    return {entry_id: "; ".join(values) for entry_id, values in out.items()}
 
 
 def entry_doi_query(entry: str) -> dict:
@@ -291,7 +345,7 @@ def _exfor_cond_rp(input_store: dict, reaction: str) -> tuple[list, str]:
         else:
             rp_mass_fmt = f"{rp_elem.capitalize()}-{rp_mass}"
         conditions.append(exfor_indexes.c.residual == rp_mass_fmt)
-        return conditions, reaction
+    return conditions, reaction
 
 
 def _exfor_cond_fy(input_store: dict, reaction: str) -> tuple[list, str]:
@@ -394,6 +448,22 @@ def _exfor_cond_ddx(input_store: dict, reaction: str) -> tuple[list, str]:
     """Extra conditions for double-differential cross section (DA/DE) queries."""
     level_num = input_store.get("level_num")
     conditions = [exfor_indexes.c.arbitrary_data == False]
+    sf4 = input_store.get("sf4")
+    sf5 = input_store.get("sf5")
+    sf7 = input_store.get("sf7")
+    sf8 = input_store.get("sf8")
+
+    if sf4:
+        conditions.append(exfor_indexes.c.sf4 == str(sf4).upper())
+    if sf5:
+        sf5_values = sf5 if isinstance(sf5, (list, tuple)) else [sf5]
+        conditions.append(exfor_indexes.c.sf5.in_(tuple(sf5_values)))
+    if sf7:
+        conditions.append(exfor_indexes.c.sf7 == str(sf7).upper())
+    if sf8:
+        sf8_values = sf8 if isinstance(sf8, (list, tuple)) else [sf8]
+        conditions.append(exfor_indexes.c.sf8.in_(tuple(sf8_values)))
+
     if isinstance(level_num, int):
         reaction = convert_partial_reactionstr_to_inl(reaction)
         conditions += [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
@@ -456,7 +526,6 @@ EXFOR_OBS_TYPE_CONFIG: dict = {
 def exfor_index_query(input_store) -> dict:
     obs_type = input_store.get("obs_type").upper()
     config = EXFOR_OBS_TYPE_CONFIG[obs_type]
-    print(obs_type)
     reaction = convert_reaction_to_exfor_style(input_store.get("reaction"))
     target = x4style_nuclide_expression(
         input_store.get("target_elem"), input_store.get("target_mass")
@@ -474,8 +543,10 @@ def exfor_index_query(input_store) -> dict:
     queries.extend(extra_conditions)
 
     if input_store.get("excl_junk_switch"):
-        queries += [exfor_indexes.c.sf7 == None, exfor_indexes.c.sf9 == None]
-        if not config.get("fixed_sf8"):
+        if not input_store.get("sf7"):
+            queries.append(exfor_indexes.c.sf7 == None)
+        queries.append(exfor_indexes.c.sf9 == None)
+        if not config.get("fixed_sf8") and not input_store.get("sf8"):
             # Skip sf8==None for obs types where sf8 carries a meaningful value
             # (e.g. MACS: sf8='MXW', GG: sf8='AV') — already constrained by the builder.
             queries.append(exfor_indexes.c.sf8 == None)
@@ -558,6 +629,87 @@ def exfor_available_reactions_query(obs_type, elem, mass, projectile):
             "process": row.process,
             "sf5": row.sf5,
             "level_num": row.level_num,
+        }
+        for row in results
+    ]
+
+
+@lru_cache(maxsize=2048)
+def exfor_available_projectiles_query(obs_type, elem=None, mass=None, exclude_projectiles=("N", "G", "E")):
+    """Return projectiles with EXFOR data for an observable/target."""
+    obs_type = (obs_type or "").upper()
+    config = EXFOR_OBS_TYPE_CONFIG.get(obs_type)
+    if config is None:
+        return []
+
+    queries = [
+        exfor_indexes.c.sf6 == config["sf6"].upper(),
+        exfor_indexes.c.projectile.is_not(None),
+        ~exfor_indexes.c.entry_id.like("V%"),
+    ]
+    if exclude_projectiles:
+        queries.append(~exfor_indexes.c.projectile.in_(tuple(exclude_projectiles)))
+
+    if elem and mass:
+        queries.append(exfor_indexes.c.target == x4style_nuclide_expression(elem, mass))
+
+    if obs_type in {"XS", "DA", "DDX"}:
+        queries.append(exfor_indexes.c.arbitrary_data == False)
+
+    stmt = (
+        select(
+            exfor_indexes.c.projectile,
+            func.count(distinct(exfor_indexes.c.process)).label("processes"),
+            func.count(distinct(exfor_indexes.c.entry_id)).label("entries"),
+        )
+        .where(and_(*queries))
+        .group_by(exfor_indexes.c.projectile)
+        .order_by(func.count(distinct(exfor_indexes.c.entry_id)).desc(), exfor_indexes.c.projectile)
+    )
+
+    with engines["exfor"].connect() as conn:
+        results = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "projectile": row.projectile,
+            "processes": row.processes,
+            "entries": row.entries,
+        }
+        for row in results
+    ]
+
+
+def ddx_product_options_query(elem, mass, projectile):
+    target = x4style_nuclide_expression(elem, mass)
+    projectile = (projectile or "").upper()
+    stmt = (
+        select(
+            exfor_indexes.c.sf4,
+            func.count(distinct(exfor_indexes.c.entry_id)).label("entries"),
+            func.sum(exfor_indexes.c.points).label("points"),
+        )
+        .where(
+            and_(
+                exfor_indexes.c.target == target,
+                exfor_indexes.c.projectile == projectile,
+                exfor_indexes.c.sf6 == "DA/DE",
+                exfor_indexes.c.arbitrary_data == False,
+                ~exfor_indexes.c.entry_id.like("V%"),
+            )
+        )
+        .group_by(exfor_indexes.c.sf4)
+        .order_by(func.count(distinct(exfor_indexes.c.entry_id)).desc(), exfor_indexes.c.sf4)
+    )
+
+    with engines["exfor"].connect() as conn:
+        results = conn.execute(stmt).fetchall()
+
+    return [
+        {
+            "sf4": row.sf4,
+            "entries": row.entries or 0,
+            "points": row.points or 0,
         }
         for row in results
     ]
@@ -710,6 +862,26 @@ def data_query(input_store, entids):
         exfor_data.c.entry_id.in_(tuple(entids)),
         ~exfor_data.c.entry_id.like("V%"),
     ]
+    en_cols = [
+        exfor_data.c.en_inc,
+        exfor_data.c.den_inc,
+        *([exfor_data.c.en_inc_frame] if "en_inc_frame" in exfor_data.c else []),
+    ]
+    y_cols = [
+        exfor_data.c.data,
+        exfor_data.c.ddata,
+        *([exfor_data.c.data_frame] if "data_frame" in exfor_data.c else []),
+    ]
+    e_out_cols = [
+        exfor_data.c.e_out,
+        exfor_data.c.de_out,
+        *([exfor_data.c.e_out_frame] if "e_out_frame" in exfor_data.c else []),
+    ]
+    angle_cols = [
+        exfor_data.c.angle,
+        exfor_data.c.dangle,
+        *([exfor_data.c.angle_frame] if "angle_frame" in exfor_data.c else []),
+    ]
 
     if level_num is not None:
         filters.append(exfor_data.c.level_num == level_num)
@@ -717,53 +889,41 @@ def data_query(input_store, entids):
     if obs_type == "SIG":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
+            *en_cols,
             exfor_data.c.level_num,
             exfor_data.c.residual,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *y_cols,
         ]
     elif obs_type == "RP":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
+            *en_cols,
             exfor_data.c.residual,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *y_cols,
         ]
     elif obs_type == "FY":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
+            *en_cols,
             exfor_data.c.charge,
             exfor_data.c.mass,
             exfor_data.c.isomer,
             exfor_data.c.residual,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *y_cols,
         ]
     elif obs_type == "DA":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.angle,
-            exfor_data.c.dangle,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *angle_cols,
+            *y_cols,
         ]
     elif obs_type == "DE":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.e_out,
-            exfor_data.c.de_out,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *e_out_cols,
+            *y_cols,
         ]
     elif obs_type == "TH":
         # restrict to thermal energy range (0.0253 eV)
@@ -771,39 +931,29 @@ def data_query(input_store, entids):
         filters.append(exfor_data.c.en_inc <= 2.54e-2)  # in eV
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *y_cols,
         ]
     elif obs_type == "TRN":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *y_cols,
         ]
     elif obs_type == "DA/DE":
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.angle,
-            exfor_data.c.dangle,
-            exfor_data.c.e_out,
-            exfor_data.c.de_out,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *angle_cols,
+            *e_out_cols,
+            *y_cols,
         ]
     elif obs_type in SCALAR_OBS - {"TH"}:
         # Scalar observables: fetch flags too for L-wave filtering (D0/D1/D2, S0/S1)
         columns = [
             exfor_data.c.entry_id,
-            exfor_data.c.en_inc,
-            exfor_data.c.den_inc,
-            exfor_data.c.data,
-            exfor_data.c.ddata,
+            *en_cols,
+            *y_cols,
             exfor_data.c.flags,
         ]
     else:
@@ -812,7 +962,8 @@ def data_query(input_store, entids):
 
     stmt = select(*columns).where(and_(*filters))
 
-    with engines["exfor"].connect() as conn:
+    with engines["exfor"].begin() as conn:
+        ensure_exfor_data_frame_columns(conn)
         result = conn.execute(stmt)
         df = pd.DataFrame(result.fetchall(), columns=result.keys())
 

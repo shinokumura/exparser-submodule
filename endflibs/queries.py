@@ -18,6 +18,7 @@ from endftables_sql.scripts.models_core import (
     endf_residual_data,
     endf_n_residual_data,
     endf_fy_data,
+    endf_ddx_data,
     resonancetable_data,
 )
 from ..utilities.util import libstyle_nuclide_expression
@@ -56,6 +57,21 @@ def _lib_cond_residual(input_store: dict) -> list:
         return []
 
 
+# Maps EXFOR SF4 codes (used on the DDX page to select the emitted particle)
+# to the outgoing-particle convention stored in endf_reactions.residual for
+# obs_type="ddx" (set by endftables_sql's load_ddx loader).
+_DDX_SF4_TO_OUTGOING: dict = {
+    "0-NN-1": "n", "0-G-0": "g", "1-H-1": "p", "1-H-2": "d",
+    "1-H-3": "t", "2-HE-3": "he3", "2-HE-4": "a",
+}
+
+
+def _lib_cond_ddx(input_store: dict) -> list:
+    """Extra conditions for DDX queries — restrict to the emitted particle (SF4)."""
+    outgoing = _DDX_SF4_TO_OUTGOING.get(str(input_store.get("sf4") or "").upper())
+    return [endf_reactions.c.residual == outgoing] if outgoing else []
+
+
 # def _lib_cond_resonance(input_store: dict) -> list:
 #     """Extra conditions for resonance parameters query."""
 #     [endf_reactions.c.residual == residual]
@@ -69,6 +85,7 @@ LIB_OBS_TYPE_CONDITION: dict = {
     "XS":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
     "RP":   {"db_obs_type": "residual", "extra": _lib_cond_residual},
     "DA":   {"db_obs_type": "angle",    "extra": _lib_cond_mt},
+    "DDX":  {"db_obs_type": "ddx",      "extra": _lib_cond_ddx},
     "FY":   {"db_obs_type": "fy",       "extra": _lib_cond_mt},
     "DE":   {"db_obs_type": "energy",   "extra": lambda _: []},
     # These use resonancetable_data, not endf_reactions → db_obs_type=None
@@ -286,6 +303,70 @@ def lib_da_data_query_at_angle(ids, angle_target):
             endf_angle_data.c.reaction_id.in_(ids),
             endf_angle_data.c.angle.between(t - tol, t + tol),
         )
+    )
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
+        )
+    return df
+
+
+def lib_ddx_distinct_query(ids):
+    """Return distinct (reaction_id, en_inc, angle) without data values.
+    Used to populate the DDX slicer dropdowns without loading the full dataset."""
+    stmt = (
+        select(
+            endf_ddx_data.c.reaction_id,
+            endf_ddx_data.c.en_inc,
+            endf_ddx_data.c.angle,
+        )
+        .where(endf_ddx_data.c.reaction_id.in_(ids))
+        .distinct()
+    )
+    with engines["endftables"].connect() as conn:
+        df = pd.DataFrame(
+            conn.execute(stmt).fetchall(),
+            columns=["reaction_id", "en_inc", "angle"],
+        )
+    return df
+
+
+def lib_ddx_data_query(ids, en_target=None, angle_target=None):
+    """Return d²σ/dΩdE rows for the given reaction ids at the selected
+    incident-energy slice, optionally narrowed to one emission angle."""
+    queries = [endf_ddx_data.c.reaction_id.in_(ids)]
+    if en_target is not None:
+        t = float(en_target)
+        tol = max(abs(t) * 1e-10, 1e-12)
+        queries.append(endf_ddx_data.c.en_inc.between(t - tol, t + tol))
+    if angle_target is not None:
+        t = float(angle_target)
+        tol = max(abs(t) * 1e-10, 1e-12)
+        queries.append(endf_ddx_data.c.angle.between(t - tol, t + tol))
+
+    stmt = (
+        select(
+            endf_ddx_data.c.id,
+            endf_ddx_data.c.reaction_id,
+            endf_ddx_data.c.en_inc,
+            endf_ddx_data.c.en_out,
+            endf_ddx_data.c.data,
+            endf_ddx_data.c.zap,
+            endf_ddx_data.c.outgoing_particle,
+            endf_ddx_data.c.frame,
+            endf_ddx_data.c.angle,
+            endf_reactions.c.evaluation,
+            endf_reactions.c.process,
+            endf_reactions.c.mt,
+            endf_reactions.c.residual,
+        )
+        .select_from(
+            endf_ddx_data.join(
+                endf_reactions,
+                endf_ddx_data.c.reaction_id == endf_reactions.c.reaction_id,
+            )
+        )
+        .where(and_(*queries))
     )
     with engines["endftables"].connect() as conn:
         df = pd.DataFrame(
