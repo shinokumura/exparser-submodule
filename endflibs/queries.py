@@ -1,6 +1,7 @@
 import sys
 import importlib
 from functools import lru_cache
+import math
 import pandas as pd
 from sqlalchemy import select, and_, distinct, text
 
@@ -72,6 +73,11 @@ def _lib_cond_ddx(input_store: dict) -> list:
     return [endf_reactions.c.residual == outgoing] if outgoing else []
 
 
+def _lib_cond_trn(input_store: dict) -> list:
+    """Transmission is derived from total cross section, MF=3/MT=1."""
+    return [endf_reactions.c.mt == 1]
+
+
 # def _lib_cond_resonance(input_store: dict) -> list:
 #     """Extra conditions for resonance parameters query."""
 #     [endf_reactions.c.residual == residual]
@@ -88,6 +94,7 @@ LIB_OBS_TYPE_CONDITION: dict = {
     "DDX":  {"db_obs_type": "ddx",      "extra": _lib_cond_ddx},
     "FY":   {"db_obs_type": "fy",       "extra": _lib_cond_mt},
     "DE":   {"db_obs_type": "energy",   "extra": lambda _: []},
+    "TRN":  {"db_obs_type": "xs",       "extra": _lib_cond_trn},
     # These use resonancetable_data, not endf_reactions → db_obs_type=None
     "RESONANCE":   {"db_obs_type": None, "extra": lambda _: []},
     "TH":   {"db_obs_type": "thermal",  "extra": _lib_cond_residual},
@@ -182,6 +189,7 @@ def lib_available_reactions_query(obs_type, elem, mass, projectile):
                 endf_reactions.c.target == target,
                 endf_reactions.c.projectile == projectile,
                 endf_reactions.c.obs_type == condition["db_obs_type"],
+                *([endf_reactions.c.mt == 1] if obs_type == "TRN" else []),
             )
         )
     )
@@ -219,6 +227,8 @@ def lib_data_query(input_store, ids):
     obs_type = input_store["obs_type"].upper()
     if obs_type == "XS":
         return lib_xs_data_query(ids, thermal=False)
+    elif obs_type == "TRN":
+        return lib_trn_data_query(input_store, ids)
     elif obs_type == "FY":
         return lib_fy_data_query(ids)
     elif obs_type == "DA":
@@ -242,6 +252,40 @@ def lib_xs_data_query(ids, thermal):
             conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
         )
     return df
+
+
+def lib_trn_data_query(input_store, ids):
+    """Return derived transmission from total cross section.
+
+    The TRN page passes areal number densities in atoms/barn.  With sigma in
+    barns, transmission is exp(-N*sigma).  One output curve is produced for
+    each (reaction_id, areal_density) pair.
+    """
+    thicknesses = input_store.get("trn_areal_densities") or []
+    if not thicknesses:
+        return pd.DataFrame()
+
+    xs_df = lib_xs_data_query(ids, thermal=False)
+    if xs_df.empty:
+        return xs_df
+
+    frames = []
+    for thickness in thicknesses:
+        try:
+            areal_density = float(thickness)
+        except (TypeError, ValueError):
+            continue
+        if areal_density <= 0:
+            continue
+
+        df = xs_df.copy()
+        df["data"] = df["data"].astype(float).map(
+            lambda sigma: math.exp(-areal_density * sigma)
+        )
+        df["trn_areal_density"] = areal_density
+        frames.append(df)
+
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def lib_da_data_query(ids):

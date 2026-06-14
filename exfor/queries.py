@@ -123,6 +123,51 @@ def trn_thickness_query(entry_ids):
     return {entry_id: "; ".join(values) for entry_id, values in out.items()}
 
 
+def trn_areal_density_query(entry_ids):
+    """Return numeric TRN THICKNESS values in atoms/barn keyed by entry id."""
+    entry_ids = tuple(entry_id for entry_id in entry_ids if entry_id)
+    if not entry_ids:
+        return {}
+
+    stmt = (
+        select(
+            exfor_native_data.c.entry_id,
+            exfor_native_data.c.unit,
+            exfor_native_data.c.data,
+        )
+        .where(
+            and_(
+                exfor_native_data.c.entry_id.in_(entry_ids),
+                exfor_native_data.c.head == "THICKNESS",
+                exfor_native_data.c.unit == "ATOMS/B",
+            )
+        )
+        .order_by(exfor_native_data.c.entry_id, exfor_native_data.c.column_index)
+    )
+
+    with engines["exfor"].connect() as conn:
+        rows = conn.execute(stmt).fetchall()
+
+    out = {}
+    for row in rows:
+        try:
+            values = json.loads(row.data)
+        except (TypeError, json.JSONDecodeError):
+            values = [row.data]
+
+        numeric_values = []
+        for value in values if isinstance(values, list) else [values]:
+            try:
+                numeric_values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+
+        if numeric_values:
+            out.setdefault(row.entry_id, []).extend(numeric_values)
+
+    return out
+
+
 def entry_doi_query(entry: str) -> dict:
     stmt = select(
         exfor_entry_dois.c.exfor_main_reference,
