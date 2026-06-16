@@ -6,7 +6,7 @@ import pandas as pd
 from functools import lru_cache
 from collections import OrderedDict
 from operator import getitem
-from sqlalchemy import select, and_, not_, or_, func, text, distinct
+from sqlalchemy import select, and_, not_, or_, func, text, distinct, literal
 
 try:
     # from app.py
@@ -1131,6 +1131,46 @@ def index_query_fission(obs_type, elem, mass, reaction, branch, lower, upper):
 ########  -------------------------------------- ##########
 
 def join_reaction_bib():
+    history_columns = set(exfor_histories.c.keys())
+    recorded_at_expr = (
+        func.max(exfor_histories.c.recorded_at).label("recorded_at")
+        if "recorded_at" in history_columns
+        else literal(None).label("recorded_at")
+    )
+    history_count_column = (
+        exfor_histories.c.id
+        if "id" in history_columns
+        else exfor_histories.c.hash
+        if "hash" in history_columns
+        else exfor_histories.c.entry
+    )
+    index_stats = (
+        select(
+            exfor_indexes.c.entry_id.label("entry_id"),
+            func.min(exfor_indexes.c.en_inc_min).label("en_inc_min"),
+            func.max(exfor_indexes.c.en_inc_max).label("en_inc_max"),
+        )
+        .group_by(exfor_indexes.c.entry_id)
+        .subquery()
+    )
+    doi_stats = (
+        select(
+            exfor_entry_dois.c.entry.label("entry"),
+            func.max(exfor_entry_dois.c.main_reference_doi).label("main_doi"),
+        )
+        .group_by(exfor_entry_dois.c.entry)
+        .subquery()
+    )
+    history_stats = (
+        select(
+            exfor_histories.c.entry.label("entry"),
+            recorded_at_expr,
+            func.count(distinct(history_count_column)).label("n_history"),
+        )
+        .group_by(exfor_histories.c.entry)
+        .subquery()
+    )
+
     stmt = (
         select(
             exfor_bib.c.entry,
@@ -1144,24 +1184,23 @@ def join_reaction_bib():
             exfor_bib.c.first_author_institute,
             exfor_bib.c.title,
             exfor_bib.c.main_reference,
-            func.max(exfor_entry_dois.c.main_reference_doi).label("main_doi"),
+            doi_stats.c.main_doi,
             exfor_bib.c.authors,
             exfor_bib.c.year,
             exfor_bib.c.main_facility_institute,
             exfor_bib.c.main_facility_type,
-            func.min(exfor_indexes.c.en_inc_min).label("en_inc_min"),
-            func.max(exfor_indexes.c.en_inc_max).label("en_inc_max"),
-            func.max(exfor_histories.c.recorded_at).label("recorded_at"),
-            func.count(distinct(exfor_histories.c.id)).label("n_history"),
+            index_stats.c.en_inc_min,
+            index_stats.c.en_inc_max,
+            history_stats.c.recorded_at,
+            history_stats.c.n_history,
         )
         .select_from(
             exfor_bib
             .join(exfor_reactions, exfor_reactions.c.entry == exfor_bib.c.entry, isouter=True)
-            .join(exfor_indexes, exfor_indexes.c.entry_id == exfor_reactions.c.entry_id, isouter=True)
-            .join(exfor_entry_dois, exfor_entry_dois.c.entry == exfor_bib.c.entry, isouter=True)
-            .join(exfor_histories, exfor_histories.c.entry == exfor_bib.c.entry, isouter=True)
+            .join(index_stats, index_stats.c.entry_id == exfor_reactions.c.entry_id, isouter=True)
+            .join(doi_stats, doi_stats.c.entry == exfor_bib.c.entry, isouter=True)
+            .join(history_stats, history_stats.c.entry == exfor_bib.c.entry, isouter=True)
         )
-        .group_by(exfor_bib.c.entry, exfor_reactions.c.entry_id)
         .order_by(exfor_bib.c.year.desc())
     )
 
@@ -1271,6 +1310,10 @@ def ensure_indexes():
         "CREATE INDEX IF NOT EXISTS ix_exfor_reactions_entry       ON exfor_reactions (entry)",
         # exfor_indexes.entry — used by join_index_bib and cross-table lookups
         "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_entry         ON exfor_indexes (entry)",
+        # exfor_indexes.entry_id — used by join_reaction_bib index aggregation
+        "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_entry_id      ON exfor_indexes (entry_id)",
+        # entry_doi.entry — used by join_reaction_bib DOI aggregation
+        "CREATE INDEX IF NOT EXISTS ix_entry_doi_entry             ON entry_doi (entry)",
         # exfor_bib.year — ORDER BY target in entries_query / join_reaction_bib
         "CREATE INDEX IF NOT EXISTS ix_exfor_bib_year              ON exfor_bib (year)",
         # exfor_data.en_inc — range filter for thermal and energy-restricted queries
@@ -1280,7 +1323,7 @@ def ensure_indexes():
         "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_tgt_proj_sf6  ON exfor_indexes (target, projectile, sf6)",
         # Wider composite for queries that also filter sf5 (branch / PAR)
         "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_tgt_proj_sf56 ON exfor_indexes (target, projectile, sf5, sf6)",
-        # exfor_histories composite — used by join_reaction_bib direct join
+        # exfor_histories composite — used by join_reaction_bib history aggregation
         "CREATE INDEX IF NOT EXISTS ix_exfor_histories_entry_cur   ON exfor_history (entry, is_current)",
     ]
     with engines["exfor"].connect() as conn:

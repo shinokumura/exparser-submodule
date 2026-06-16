@@ -164,7 +164,4 @@ examples/
 _*
 config.py
 
-# other packages
-exfor_dictionary/
-endflib_sql/
 
