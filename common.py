@@ -36,6 +36,7 @@ LIB_LIST_MAX = {
     # "tendl.2021",
     "endfb8.1": "ENDF/B-VIII.0",
     "eaf.2010" : "EAF-2010",  # European Activation File
+    "fendl3.2" : "FENDL-3.2c", 
     "jeff4.0": "JEFF-4T4",
     "jendl5.0": "JENDL-5.0",
     # "jendl4.0",
@@ -72,6 +73,42 @@ pageparam_to_endftables_obs_type = {
 }
 
 
+LIGHT_ION_PROJECTILES = {
+    "P": "p",
+    "D": "d",
+    "T": "t",
+    "A": "a",
+    "HE3": "He-3",
+}
+
+
+def nuclide_reformat(code):
+    parts = str(code).split("-")
+    if len(parts) >= 3 and parts[0].isdigit():
+        nuclide = parts[1].capitalize() + "-" + parts[2]
+        if len(parts) > 3:
+            nuclide += "-" + parts[3].lower()
+        return nuclide
+    return str(code)
+
+
+def projectile_reformat(projectile):
+    projectile = str(projectile).upper()
+    if projectile in LIGHT_ION_PROJECTILES:
+        return LIGHT_ION_PROJECTILES[projectile]
+    return nuclide_reformat(projectile)
+
+
+def is_ion_projectile(projectile):
+    projectile = str(projectile).upper()
+    if projectile in LIGHT_ION_PROJECTILES:
+        return True
+    if projectile in ("0", "N", "G"):
+        return False
+    parts = projectile.split("-")
+    return len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) > 0
+
+
 def generate_exfortables_file_path(input_store):
     obs_type = input_store.get("obs_type").upper()
     elem = input_store.get("target_elem")
@@ -87,7 +124,20 @@ def generate_exfortables_file_path(input_store):
     if obs_type == "TH" and obs_type == "RP":
         obs_type = "XS"
 
-    if level_num:
+    if input_store.get("page_param") == "ion" or is_ion_projectile(
+        reaction.split(",")[0]
+    ):
+        outgoing = reaction.split(",", 1)[1].lower()
+        dir = os.path.join(
+            EXFORTABLES_PY_GIT_REPO_PATH,
+            "ion",
+            target,
+            projectile_reformat(reaction.split(",")[0]),
+            outgoing if not level_num else outgoing + "-L" + str(level_num),
+            obs_type.lower() if obs_type != "RP" else "xs",
+        )
+
+    elif level_num:
         reaction = convert_partial_reactionstr_to_inl(reaction)
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
