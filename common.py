@@ -14,8 +14,13 @@
 
 import os
 import json
+from pathlib import Path
 
-from config import DATA_DIR, EXFORTABLES_PY_GIT_REPO_PATH, ENDFTABLES_PATH
+from config import (
+    DATA_DIR,
+    ENDFTABLES_PATH,
+    EXFORTABLES_PY_GIT_REPO_PATH,
+)
 from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 from submodules.utilities.util import get_str_from_string, get_number_from_string
@@ -34,10 +39,10 @@ LIB_LIST_MAX = {
     "tendl.2023": "TENDL-2023-update",
     "tendl.2025": "TENDL-2025",
     # "tendl.2021",
-    "endfb8.1": "ENDF/B-VIII.0",
+    "endfb8.1": "ENDF/B-VIII.1",
     "eaf.2010" : "EAF-2010",  # European Activation File
     "fendl3.2" : "FENDL-3.2c", 
-    "jeff4.0": "JEFF-4T4",
+    "jeff4.0": "JEFF-4.0",
     "jendl5.0": "JENDL-5.0",
     # "jendl4.0",
     "iaea.2022": "IAEA-2022",
@@ -82,6 +87,80 @@ LIGHT_ION_PROJECTILES = {
 }
 
 
+_EXFOR_SCALAR_GLOBS = {
+    "TH": ("thermal/*.txt",),
+    "RI": ("resonance_integral/*.txt",),
+    "MACS": ("macs/*.txt",),
+    "D0": ("resonance_spacing/**/*.txt",),
+    "D1": ("resonance_spacing/**/*.txt", "resonance_parameter/**/*.txt"),
+    "D2": ("resonance_spacing/**/*.txt", "resonance_parameter/**/*.txt"),
+    "S0": ("strength_function/*.txt", "resonance_parameter/**/S0/*.txt"),
+    "S1": ("strength_function/*.txt", "resonance_parameter/**/S1/*.txt"),
+    "GG0": ("gamma_gamma/*.txt", "resonance_parameter/**/AV/*.txt"),
+    "GG1": ("gamma_gamma/*.txt", "resonance_parameter/**/AV/*.txt"),
+    "RAD": ("resonance_parameter/ARE/**/*.txt",),
+    "STF": ("strength_function/*.txt",),
+}
+
+_THERMAL_REACTION_DIR = {
+    "el": "el",
+    "a": "na",
+    "f": "nf",
+    "g": "ng",
+    "p": "np",
+    "tot": "tot",
+}
+
+_RESONANCE_QUANTITY_DIR = {
+    "D0": "D0",
+    "D1": "D1",
+    "D2": "D2",
+    "S0": "S0",
+    "S1": "S1",
+    "GG0": "gamgam0",
+    "GG1": "gamgam1",
+    "RAD": "R",
+    "STF": "S0",
+}
+
+
+def _glob_text_files(root, patterns):
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    return sorted(
+        {str(path) for pattern in patterns for path in root.glob(pattern) if path.is_file()}
+    )
+
+
+def _resonancetables_file_path(input_store):
+    obs_type = (input_store.get("obs_type") or "").upper()
+    reaction = (input_store.get("reaction") or "").split(",", 1)
+    if len(reaction) != 2:
+        return []
+
+    process = reaction[1].lower()
+    if obs_type == "TH":
+        top_dir = "thermal"
+        quantity = _THERMAL_REACTION_DIR.get(process)
+    elif obs_type == "MACS" and process == "g":
+        top_dir, quantity = "macs", "ng"
+    elif obs_type == "RI":
+        top_dir, quantity = "resonance", {"g": "Ig", "f": "If"}.get(process)
+    else:
+        top_dir, quantity = "resonance", _RESONANCE_QUANTITY_DIR.get(obs_type)
+
+    if not quantity:
+        return []
+
+    elem = str(input_store.get("target_elem") or "").capitalize()
+    mass = str(input_store.get("target_mass") or "")
+    target = f"{elem}{mass}"
+    directory = Path(DATA_DIR, "resonancetables", top_dir, quantity, "nuc")
+    filename_quantity = "macs" if obs_type == "MACS" else quantity
+    return _glob_text_files(directory, (f"{target}_{filename_quantity}.txt",))
+
+
 def nuclide_reformat(code):
     parts = str(code).split("-")
     if len(parts) >= 3 and parts[0].isdigit():
@@ -110,7 +189,7 @@ def is_ion_projectile(projectile):
 
 
 def generate_exfortables_file_path(input_store):
-    obs_type = input_store.get("obs_type").upper()
+    obs_type = (input_store.get("obs_type") or "").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     branch = input_store.get("branch")
@@ -121,8 +200,15 @@ def generate_exfortables_file_path(input_store):
     target = f"{elem.capitalize()}-{str(mass)}"
     exfiles = []
 
-    if obs_type == "TH" and obs_type == "RP":
-        obs_type = "XS"
+    if obs_type in _EXFOR_SCALAR_GLOBS:
+        reaction_dir = reaction.replace(",", "-").lower()
+        directory = Path(
+            EXFORTABLES_PY_GIT_REPO_PATH,
+            reaction.split(",", 1)[0].lower(),
+            target,
+            reaction_dir,
+        )
+        return _glob_text_files(directory, _EXFOR_SCALAR_GLOBS[obs_type])
 
     if input_store.get("page_param") == "ion" or is_ion_projectile(
         reaction.split(",")[0]
@@ -194,16 +280,16 @@ def generate_endftables_file_path(input_store):
     """
     Generate the direct file links
     """
-    obs_type = input_store.get("obs_type").upper()
+    obs_type = (input_store.get("obs_type") or "").upper()
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
 
-    target = f"{elem.capitalize()}{str(mass).zfill(3)}"
+    if obs_type in _EXFOR_SCALAR_GLOBS:
+        return _resonancetables_file_path(input_store)
 
-    if obs_type == "TH":
-        obs_type = "XS"
+    target = f"{elem.capitalize()}{str(mass).zfill(3)}"
 
     libfiles = []
     for lib in LIB_LIST_MAX:
@@ -244,57 +330,6 @@ def generate_endftables_file_path(input_store):
                 libfiles += [os.path.join(dir, f) for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
 
     return libfiles
-
-
-def generate_single_endftables_file_path(input_store):
-    """
-    Generate the direct file links
-    """
-    obs_type = input_store.get("obs_type").upper()
-    projectile = input_store.get("projectile")
-    lib = input_store.get("evaluation")
-    mt = input_store.get("mt")
-    target = input_store.get("target")
-    libfiles = []
-    if obs_type == "FY":
-        dir = os.path.join(
-            ENDFTABLES_PATH,
-            "FY",
-            projectile.lower(),
-            target,
-            lib,
-            "tables/FY",
-        )
-    else:
-        dir = os.path.join(
-            ENDFTABLES_PATH,
-            projectile.lower(),
-            target,
-            lib,
-            "tables",
-            obs_type.lower(),
-        )
-
-    if os.path.exists(dir):
-        libfiles += [f for f in os.listdir(dir) if f"MT{str(mt).zfill(3)}" in f]
-
-    if libfiles:
-        return dir, libfiles[0]
-
-
-def generate_link_of_files(files):
-    ## similar to list_link_of_files in dataexplorer/common.py
-    flinks = []
-
-    for f in sorted(files):
-        filename = os.path.basename(f)
-        dirname = os.path.dirname(f)
-        linkdir = dirname.replace(DATA_DIR, "")
-
-        flinks.append(linkdir)
-        # flinks.append(html.Br())
-
-    return flinks
 
 
 def sanitize_for_js(obj):
