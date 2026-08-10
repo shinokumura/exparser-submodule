@@ -8,6 +8,7 @@ from collections import OrderedDict
 from operator import getitem
 from sqlalchemy import select, and_, not_, or_, func, text, distinct, literal
 
+
 try:
     # from app.py
     from config import engines
@@ -43,7 +44,10 @@ from ..utilities.reaction import (
     convert_partial_reactionstr_to_inl,
     convert_reaction_to_exfor_style,
 )
-from ..utilities.obs_types import SCALAR_OBS, L_WAVE_OBS
+from ..utilities.obs_types import (
+    SCALAR_OBS,
+    L_WAVE_OBS,
+)
 
 
 def get_exfor_bib_table():
@@ -348,11 +352,44 @@ def _exfor_cond_xs(input_store: dict, reaction: str) -> tuple[list, str]:
             exfor_indexes.c.arbitrary_data == False
         ]
 
-    if not any(r in reaction for r in ("tot", "f")):
-        conditions += [
-            not_(exfor_indexes.c.sf4.endswith(f"-{suffix}"))
-            for suffix in ("G", "M", "L", "M1", "M2")
-        ]
+    outgoing = reaction.split(",", 1)[1].lower() if "," in reaction else ""
+    if outgoing not in {"tot", "total", "f"}:
+        # SQL comparisons against NULL evaluate to UNKNOWN.  Applying only
+        # ``NOT sf4 LIKE ...`` therefore discarded ordinary datasets whose
+        # SF4 is unset (common for heavy-ion ABS and other inclusive data).
+        conditions.append(
+            or_(
+                exfor_indexes.c.sf4.is_(None),
+                and_(
+                    *[
+                        not_(exfor_indexes.c.sf4.endswith(f"-{suffix}"))
+                        for suffix in ("G", "M", "L", "M1", "M2")
+                    ]
+                ),
+            )
+        )
+
+    return conditions, reaction
+
+
+def _exfor_cond_gamma_production(
+    input_store: dict, reaction: str
+) -> tuple[list, str]:
+    """Select inclusive total photon-production cross sections.
+
+    SF5=PAR denotes a cross section for an individual gamma line and is not
+    comparable with ENDF MT=202, so only unbranched SF5 records are selected.
+    """
+    conditions = []
+    projectile = str(input_store.get("inc_pt") or reaction.split(",", 1)[0]).upper()
+    reaction = f"{projectile},X"
+    if input_store.get("excl_junk_switch"):
+        conditions.append(exfor_indexes.c.sf5 == None)
+    conditions += [
+        exfor_indexes.c.process == reaction,
+        exfor_indexes.c.sf4 == "0-G-0",
+        exfor_indexes.c.arbitrary_data == False,
+    ]
 
     return conditions, reaction
 
@@ -436,6 +473,27 @@ def _exfor_cond_macs(input_store: dict, reaction: str) -> tuple[list, str]:
         exfor_indexes.c.arbitrary_data == False,
     ]
     return conditions, reaction
+
+
+def _exfor_cond_sfactor(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for astrophysical S-factor datasets.
+
+    EXFOR stores S factors as cross sections (SF6=SIG) with the SFC modifier
+    in SF8.  Keep qualified variants such as SFC/RAW and SFC/AV as well.
+    """
+    conditions, reaction = _exfor_cond_xs(input_store, reaction)
+    conditions.append(exfor_indexes.c.sf8.like("SFC%"))
+    return conditions, reaction
+
+
+def _exfor_cond_sgv(input_store: dict, reaction: str) -> tuple[list, str]:
+    """Extra conditions for thermonuclear reaction-rate datasets."""
+    return [
+        exfor_indexes.c.process == reaction.upper(),
+        exfor_indexes.c.x_head.like("KT%"),
+        exfor_indexes.c.y_unit == "CM3/S/MOL",
+        exfor_indexes.c.arbitrary_data == False,
+    ], reaction
 
 
 def _exfor_cond_gg(input_store: dict, reaction: str) -> tuple[list, str]:
@@ -546,6 +604,11 @@ def _exfor_cond_rad(input_store: dict, reaction: str) -> tuple[list, str]:
 # To add a new observable: add one entry here and implement its condition builder above.
 EXFOR_OBS_TYPE_CONFIG: dict = {
     "XS":   {"sf6": "SIG", "extra": _exfor_cond_xs,           "fixed_sf8": False},
+    "GPROD": {
+        "sf6": "SIG",
+        "extra": _exfor_cond_gamma_production,
+        "fixed_sf8": False,
+    },
     "RP":   {"sf6": "SIG", "extra": _exfor_cond_rp,           "fixed_sf8": False},
     "FY":   {"sf6": "FY",  "extra": _exfor_cond_fy,           "fixed_sf8": False},
     "DA":   {"sf6": "DA",  "extra": _exfor_cond_da,           "fixed_sf8": False},
@@ -553,6 +616,8 @@ EXFOR_OBS_TYPE_CONFIG: dict = {
     "TH":   {"sf6": "SIG", "extra": _exfor_cond_th,           "fixed_sf8": False},  # energy filter applied in data_query
     "RI":   {"sf6": "RI",  "extra": _exfor_cond_ri,           "fixed_sf8": False},
     "MACS": {"sf6": "SIG", "extra": _exfor_cond_macs,         "fixed_sf8": True},   # sf8=MXW/* set by builder
+    "SFC":  {"sf6": "SIG", "extra": _exfor_cond_sfactor,      "fixed_sf8": True},   # astrophysical S factor, sf8=SFC/*
+    "SGV":  {"sf6": "SGV", "extra": _exfor_cond_sgv,          "fixed_sf8": True},   # thermonuclear reaction rate
     # Per-quantity aliases — same EXFOR conditions as their parent type;
     # reaction parameter distinguishes D0 (n,0) from D1 (n,el) etc.
     "D0":   {"sf6": "D",   "extra": _exfor_cond_d,            "fixed_sf8": False},
@@ -653,8 +718,17 @@ def exfor_available_reactions_query(obs_type, elem, mass, projectile):
         ~exfor_indexes.c.entry_id.like("V%"),
     ]
 
-    if obs_type in {"XS", "DA", "DDX"}:
+    if obs_type in {"XS", "DA", "DDX", "GPROD"}:
         queries.append(exfor_indexes.c.arbitrary_data == False)
+
+    if obs_type == "GPROD":
+        queries.extend([
+            exfor_indexes.c.process == f"{projectile},X",
+            exfor_indexes.c.sf4 == "0-G-0",
+            exfor_indexes.c.sf5.is_(None),
+        ])
+    if obs_type == "SFC":
+        queries.append(exfor_indexes.c.sf8.like("SFC%"))
 
     stmt = (
         select(
@@ -698,8 +772,17 @@ def exfor_available_projectiles_query(obs_type, elem=None, mass=None, exclude_pr
     if elem and mass:
         queries.append(exfor_indexes.c.target == x4style_nuclide_expression(elem, mass))
 
-    if obs_type in {"XS", "DA", "DDX"}:
+    if obs_type in {"XS", "DA", "DDX", "GPROD"}:
         queries.append(exfor_indexes.c.arbitrary_data == False)
+
+    if obs_type == "GPROD":
+        queries.extend([
+            exfor_indexes.c.process == exfor_indexes.c.projectile + ",X",
+            exfor_indexes.c.sf4 == "0-G-0",
+            exfor_indexes.c.sf5.is_(None),
+        ])
+    if obs_type == "SF":
+        queries.append(exfor_indexes.c.sf8.like("SFC%"))
 
     stmt = (
         select(
@@ -898,7 +981,7 @@ def data_query(input_store, entids):
     obs_type = input_store.get("obs_type", "").upper()
     level_num = input_store.get("level_num")
 
-    if obs_type == "XS":
+    if obs_type in {"XS", "SF", "GPROD"}:
         obs_type = "SIG"
     elif obs_type == "DDX":
         obs_type = "DA/DE"
@@ -907,6 +990,14 @@ def data_query(input_store, entids):
         exfor_data.c.entry_id.in_(tuple(entids)),
         ~exfor_data.c.entry_id.like("V%"),
     ]
+    if input_store.get("page_param") == "trn":
+        energy_range = input_store.get("energy_range") or [None, None]
+        start_mev = energy_range[0] if len(energy_range) > 0 else None
+        end_mev = energy_range[1] if len(energy_range) > 1 else None
+        if start_mev is not None:
+            filters.append(exfor_data.c.en_inc >= float(start_mev) * 1e6)
+        if end_mev is not None:
+            filters.append(exfor_data.c.en_inc <= float(end_mev) * 1e6)
     en_cols = [
         exfor_data.c.en_inc,
         exfor_data.c.den_inc,
@@ -920,6 +1011,8 @@ def data_query(input_store, entids):
     e_out_cols = [
         exfor_data.c.e_out,
         exfor_data.c.de_out,
+        *([exfor_data.c.e_out_min] if "e_out_min" in exfor_data.c else []),
+        *([exfor_data.c.e_out_max] if "e_out_max" in exfor_data.c else []),
         *([exfor_data.c.e_out_frame] if "e_out_frame" in exfor_data.c else []),
     ]
     angle_cols = [
@@ -985,13 +1078,27 @@ def data_query(input_store, entids):
             *en_cols,
             *y_cols,
         ]
+    elif obs_type == "SGV":
+        columns = [
+            exfor_data.c.entry_id,
+            *en_cols,
+            *y_cols,
+        ]
     elif obs_type == "DA/DE":
+        y_unit = (
+            select(exfor_indexes.c.y_unit)
+            .where(exfor_indexes.c.entry_id == exfor_data.c.entry_id)
+            .limit(1)
+            .scalar_subquery()
+            .label("y_unit")
+        )
         columns = [
             exfor_data.c.entry_id,
             *en_cols,
             *angle_cols,
             *e_out_cols,
             *y_cols,
+            y_unit,
         ]
     elif obs_type in SCALAR_OBS - {"TH"}:
         # Scalar observables: fetch flags too for L-wave filtering (D0/D1/D2, S0/S1)
@@ -1291,42 +1398,3 @@ def get_data_points_for_entries(entry_ids: list) -> int:
 #         return dict(zip(df["entry"], df["committed_at"]))
 #     except Exception:
 #         return {}
-
-
-
-
-########  -------------------------------------- ##########
-##         Index creation
-########  -------------------------------------- ##########
-
-def ensure_indexes():
-    """Create missing indexes on the EXFOR database.
-
-    Safe to call repeatedly — every statement uses IF NOT EXISTS.
-    Call once at application startup.
-    """
-    ddl = [
-        # exfor_reactions.entry — join key with exfor_bib; not indexed in models_core
-        "CREATE INDEX IF NOT EXISTS ix_exfor_reactions_entry       ON exfor_reactions (entry)",
-        # exfor_indexes.entry — used by join_index_bib and cross-table lookups
-        "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_entry         ON exfor_indexes (entry)",
-        # exfor_indexes.entry_id — used by join_reaction_bib index aggregation
-        "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_entry_id      ON exfor_indexes (entry_id)",
-        # entry_doi.entry — used by join_reaction_bib DOI aggregation
-        "CREATE INDEX IF NOT EXISTS ix_entry_doi_entry             ON entry_doi (entry)",
-        # exfor_bib.year — ORDER BY target in entries_query / join_reaction_bib
-        "CREATE INDEX IF NOT EXISTS ix_exfor_bib_year              ON exfor_bib (year)",
-        # exfor_data.en_inc — range filter for thermal and energy-restricted queries
-        "CREATE INDEX IF NOT EXISTS ix_exfor_data_en_inc           ON exfor_data (en_inc)",
-        # Composite covering the hot path in exfor_index_query:
-        #   WHERE target=? AND projectile=? AND sf6=?  [± sf5/sf7/sf8/sf9]
-        "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_tgt_proj_sf6  ON exfor_indexes (target, projectile, sf6)",
-        # Wider composite for queries that also filter sf5 (branch / PAR)
-        "CREATE INDEX IF NOT EXISTS ix_exfor_indexes_tgt_proj_sf56 ON exfor_indexes (target, projectile, sf5, sf6)",
-        # exfor_histories composite — used by join_reaction_bib history aggregation
-        "CREATE INDEX IF NOT EXISTS ix_exfor_histories_entry_cur   ON exfor_history (entry, is_current)",
-    ]
-    with engines["exfor"].connect() as conn:
-        for stmt in ddl:
-            conn.execute(text(stmt))
-        conn.commit()

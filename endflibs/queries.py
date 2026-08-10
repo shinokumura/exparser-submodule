@@ -1,7 +1,7 @@
-import sys
 import importlib
 from functools import lru_cache
 import math
+import numpy as np
 import pandas as pd
 from sqlalchemy import select, and_, distinct, text
 
@@ -22,7 +22,8 @@ from endftables_sql.scripts.models_core import (
     endf_ddx_data,
     resonancetable_data,
 )
-from ..utilities.util import libstyle_nuclide_expression
+from ..utilities.util import get_number_from_string, libstyle_nuclide_expression
+from ..utilities.elem import elemtoz
 from ..utilities.obs_types import SCALAR_OBS
 
 
@@ -62,8 +63,13 @@ def _lib_cond_residual(input_store: dict) -> list:
 # to the outgoing-particle convention stored in endf_reactions.residual for
 # obs_type="ddx" (set by endftables_sql's load_ddx loader).
 _DDX_SF4_TO_OUTGOING: dict = {
-    "0-NN-1": "n", "0-G-0": "g", "1-H-1": "p", "1-H-2": "d",
-    "1-H-3": "t", "2-HE-3": "he3", "2-HE-4": "a",
+    "0-NN-1": "n", 
+    "0-G-0": "g", 
+    "1-H-1": "p", 
+    "1-H-2": "d",
+    "1-H-3": "t", 
+    "2-HE-3": "he3", 
+    "2-HE-4": "a",
 }
 
 
@@ -89,6 +95,12 @@ def _lib_cond_trn(input_store: dict) -> list:
 # db_obs_type=None means no endf_reactions entry — use resonancetable_data instead.
 LIB_OBS_TYPE_CONDITION: dict = {
     "XS":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
+    "GPROD": {
+        "db_obs_type": "gamma_production",
+        "extra": _lib_cond_mt,
+    },
+    "SF":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
+    "SFC":  {"db_obs_type": "xs",       "extra": _lib_cond_mt},
     "RP":   {"db_obs_type": "residual", "extra": _lib_cond_residual},
     "DA":   {"db_obs_type": "angle",    "extra": _lib_cond_mt},
     "DDX":  {"db_obs_type": "ddx",      "extra": _lib_cond_ddx},
@@ -190,6 +202,10 @@ def lib_available_reactions_query(obs_type, elem, mass, projectile):
                 endf_reactions.c.projectile == projectile,
                 endf_reactions.c.obs_type == condition["db_obs_type"],
                 *([endf_reactions.c.mt == 1] if obs_type == "TRN" else []),
+                *(
+                    [endf_reactions.c.mt == 202]
+                    if obs_type == "GPROD" else []
+                ),
             )
         )
     )
@@ -225,8 +241,10 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
 
 def lib_data_query(input_store, ids):
     obs_type = input_store["obs_type"].upper()
-    if obs_type == "XS":
+    if obs_type in {"XS", "GPROD"}:
         return lib_xs_data_query(ids, thermal=False)
+    elif obs_type in {"SF", "SFC"}:
+        return lib_sfactor_data_query(input_store, ids)
     elif obs_type == "TRN":
         return lib_trn_data_query(input_store, ids)
     elif obs_type == "FY":
@@ -242,16 +260,142 @@ def lib_data_query(input_store, ids):
     return pd.DataFrame()
 
 
-def lib_xs_data_query(ids, thermal):
+def lib_xs_data_query(ids, thermal, energy_range=None):
     queries = [endf_xs_data.c.reaction_id.in_(ids)]
     if thermal:
         queries.append(endf_xs_data.c.en_inc == 2.53e-8)
+    energy_range = energy_range or [None, None]
+    start_mev = energy_range[0] if len(energy_range) > 0 else None
+    end_mev = energy_range[1] if len(energy_range) > 1 else None
+    if start_mev is not None:
+        queries.append(endf_xs_data.c.en_inc >= float(start_mev))
+    if end_mev is not None:
+        queries.append(endf_xs_data.c.en_inc <= float(end_mev))
     stmt = select(endf_xs_data).where(and_(*queries))
     with engines["endftables"].connect() as conn:
         df = pd.DataFrame(
             conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
         )
     return df
+
+
+_SFACTOR_PROJECTILES = {
+    "P": (1, 1),
+    "D": (1, 2),
+    "T": (1, 3),
+    "HE3": (2, 3),
+    "H": (2, 3),  # endftables convention for a helium-3 projectile
+    "A": (2, 4),
+}
+
+
+def sfactor_system_properties(target_elem, target_mass, projectile):
+    """Return charges, reduced mass, and the lab-to-CM energy factor.
+
+    Nuclear masses are approximated by mass numbers, consistently with the
+    nuclide information already used elsewhere in Data Explorer.
+    """
+    projectile_key = str(projectile or "").upper()
+    projectile_properties = _SFACTOR_PROJECTILES.get(projectile_key)
+    target_elem = str(target_elem or "")
+    target_z = (
+        target_elem
+        if target_elem.isnumeric()
+        else elemtoz(target_elem.capitalize())
+    )
+    target_a = get_number_from_string(str(target_mass or ""))
+    if projectile_properties is None or not target_z or not target_a:
+        raise ValueError("S-factor construction requires isotopic target and projectile")
+
+    projectile_z, projectile_a = projectile_properties
+    target_z = int(target_z)
+    target_a = int(target_a)
+    reduced_mass = projectile_a * target_a / (projectile_a + target_a)
+    return {
+        "projectile_z": projectile_z,
+        "target_z": target_z,
+        "reduced_mass_u": reduced_mass,
+        "lab_to_cm": target_a / (projectile_a + target_a),
+    }
+
+
+def construct_sfactor_from_xs(xs_df, target_elem, target_mass, projectile):
+    """Construct an astrophysical S factor from evaluated cross sections.
+
+    ``endf_xs_data`` stores laboratory incident energy in MeV and cross
+    section in barns.  The returned ``en_inc`` is center-of-mass energy in
+    MeV and ``data`` is S(E) in eV*barn.
+    """
+    if xs_df is None or xs_df.empty:
+        return pd.DataFrame()
+
+    try:
+        properties = sfactor_system_properties(
+            target_elem, target_mass, projectile
+        )
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return pd.DataFrame()
+
+    df = xs_df.copy()
+    lab_energy = pd.to_numeric(df["en_inc"], errors="coerce")
+    cross_section = pd.to_numeric(df["data"], errors="coerce")
+    cm_energy = lab_energy * properties["lab_to_cm"]
+
+    valid = (
+        lab_energy.notna()
+        & cross_section.notna()
+        & (cm_energy > 0)
+        & (cross_section >= 0)
+    )
+    df = df.loc[valid].copy()
+    if df.empty:
+        return df
+
+    lab_energy = lab_energy.loc[valid].astype(float)
+    cm_energy = cm_energy.loc[valid].astype(float)
+    cross_section = cross_section.loc[valid].astype(float)
+
+    # IAEA/EMPIRE convention: E in MeV, masses in u.
+    two_pi_eta = (
+        0.9895106848
+        * properties["projectile_z"]
+        * properties["target_z"]
+        * np.sqrt(properties["reduced_mass_u"] / cm_energy)
+    )
+
+    sfactor = np.zeros(len(df), dtype=float)
+    nonzero = cross_section.to_numpy() > 0
+    log_sfactor = (
+        np.log(cross_section.to_numpy()[nonzero])
+        + np.log(cm_energy.to_numpy()[nonzero] * 1.0e6)
+        + two_pi_eta.to_numpy()[nonzero]
+    )
+    finite = log_sfactor <= np.log(np.finfo(float).max)
+    sfactor_nonzero = np.full(log_sfactor.shape, np.nan)
+    sfactor_nonzero[finite] = np.exp(log_sfactor[finite])
+    sfactor[nonzero] = sfactor_nonzero
+
+    df["en_inc_lab"] = lab_energy.to_numpy()
+    df["en_inc"] = cm_energy.to_numpy()
+    df["xs_data"] = cross_section.to_numpy()
+    df["data"] = sfactor
+    df["sfactor_unit"] = "eV*b"
+    df["reduced_mass_u"] = properties["reduced_mass_u"]
+    return df[np.isfinite(df["data"])].reset_index(drop=True)
+
+
+def lib_sfactor_data_query(input_store, ids):
+    xs_df = lib_xs_data_query(
+        ids,
+        thermal=False,
+        energy_range=input_store.get("energy_range"),
+    )
+    return construct_sfactor_from_xs(
+        xs_df,
+        input_store.get("target_elem"),
+        input_store.get("target_mass"),
+        input_store.get("inc_pt"),
+    )
 
 
 def lib_trn_data_query(input_store, ids):
@@ -265,7 +409,11 @@ def lib_trn_data_query(input_store, ids):
     if not thicknesses:
         return pd.DataFrame()
 
-    xs_df = lib_xs_data_query(ids, thermal=False)
+    xs_df = lib_xs_data_query(
+        ids,
+        thermal=False,
+        energy_range=input_store.get("energy_range"),
+    )
     if xs_df.empty:
         return xs_df
 
@@ -784,25 +932,3 @@ def resonancetable_obs_type_list(data_type: str) -> list[str]:
 ########  -------------------------------------- ##########
 ##         Index creation
 ########  -------------------------------------- ##########
-
-def ensure_indexes():
-    """Create missing indexes on the endftables database.
-
-    Safe to call repeatedly — every statement uses IF NOT EXISTS.
-    Call once at application startup.
-    """
-    ddl = [
-        # reaction_id FK in all data tables — used in every IN() data fetch.
-        # endf_reactions already has comprehensive indexes in the DB (idx_endf_reactions_*).
-        "CREATE INDEX IF NOT EXISTS ix_endf_xs_data_rid         ON endf_xs_data (reaction_id)",
-        "CREATE INDEX IF NOT EXISTS ix_endf_angle_data_rid      ON endf_angle_data (reaction_id)",
-        "CREATE INDEX IF NOT EXISTS ix_endf_residual_data_rid   ON endf_residual_data (reaction_id)",
-        "CREATE INDEX IF NOT EXISTS ix_endf_n_residual_data_rid ON endf_n_residual_data (reaction_id)",
-        "CREATE INDEX IF NOT EXISTS ix_endf_fy_data_rid         ON endf_fy_data (reaction_id)",
-        # resonancetable_data — only quantity exists as a filterable column in the live DB
-        "CREATE INDEX IF NOT EXISTS ix_resonancetable_quantity  ON resonancetable_data (quantity)",
-    ]
-    with engines["endftables"].connect() as conn:
-        for stmt in ddl:
-            conn.execute(text(stmt))
-        conn.commit()

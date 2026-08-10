@@ -25,6 +25,13 @@ SCALAR_OBS: frozenset = frozenset({
     "IF", "RAD", "STF",
 })
 
+# Total photon-production cross section.  EXFOR identifies the inclusive
+# emitted photon in SF4.  The evaluated curve is constructed from MF=6/12/13
+# and indexed with the conventional production MT=202 identifier.
+# Keep these identifiers together so the UI and database adapters cannot drift.
+# GAMMA_PRODUCTION_OBS_TYPE = "GPROD"
+GAMMA_PRODUCTION_SF4 = "0-G-0"
+
 # Mapping from per-L obs_type to expected Momentum-L integer value.
 # Used to post-filter EXFOR data fetched for D0/D1/D2 and S0/S1.
 L_WAVE_OBS: dict = {
@@ -59,6 +66,7 @@ sf6_to_mf: dict[str, str] = {
 
 sf6_to_dir: dict[str, str] = {
     "SIG":   "xs",
+    "GPROD": "xs",
     "DA":    "angle",
     "DE":    "energy",
     "DA/DE": "energy/angle",
@@ -69,7 +77,13 @@ sf6_to_dir: dict[str, str] = {
     "FY/DE": "fission/energy",
     "KE":    "kinetic_energy",
     "AKE":   "kinetic_energy/average",
+    "TRN":   "transmission",
 }
+
+
+# Pages whose downloadable source files currently come only from
+# EXFORTABLES_py.  Keep the UI and path generation on the same definition.
+EXFOR_ONLY_FILE_DOWNLOADS: frozenset = frozenset({"TRN"})
 
 
 # SF6 codes that represent resonance parameters

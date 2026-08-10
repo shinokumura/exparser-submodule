@@ -17,12 +17,17 @@ import json
 from pathlib import Path
 
 from config import (
-    DATA_DIR,
     ENDFTABLES_PATH,
     EXFORTABLES_PY_GIT_REPO_PATH,
+    RESONANCETABLES_GIT_REPO_PATH,
 )
 from submodules.utilities.elem import elemtoz
 from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
+from submodules.utilities.obs_types import (
+    EXFOR_ONLY_FILE_DOWNLOADS,
+    GAMMA_PRODUCTION_SF4,
+    sf6_to_dir,
+)
 from submodules.utilities.util import get_str_from_string, get_number_from_string
 
 
@@ -36,7 +41,7 @@ def open_json(file):
 
 
 LIB_LIST_MAX = {
-    "tendl.2023": "TENDL-2023-update",
+    "tendl.2023": "TENDL-2023",
     "tendl.2025": "TENDL-2025",
     # "tendl.2021",
     "endfb8.1": "ENDF/B-VIII.1",
@@ -56,6 +61,7 @@ LIB_LIST_MAX = {
 
 pageparam_to_sf6 = {
     "XS": "SIG",
+    "GPROD": "SIG",
     "TH": "SIG",
     "RP": "SIG",
     "FY": "FY",
@@ -68,6 +74,7 @@ pageparam_to_sf6 = {
 
 pageparam_to_endftables_obs_type = {
     "XS": "xs",
+    "GPROD": "xs",
     "TH": "xs",
     "RP": "residual",
     "FY": "fission",
@@ -91,13 +98,13 @@ _EXFOR_SCALAR_GLOBS = {
     "TH": ("thermal/*.txt",),
     "RI": ("resonance_integral/*.txt",),
     "MACS": ("macs/*.txt",),
-    "D0": ("resonance_spacing/**/*.txt",),
-    "D1": ("resonance_spacing/**/*.txt", "resonance_parameter/**/*.txt"),
-    "D2": ("resonance_spacing/**/*.txt", "resonance_parameter/**/*.txt"),
-    "S0": ("strength_function/*.txt", "resonance_parameter/**/S0/*.txt"),
-    "S1": ("strength_function/*.txt", "resonance_parameter/**/S1/*.txt"),
-    "GG0": ("gamma_gamma/*.txt", "resonance_parameter/**/AV/*.txt"),
-    "GG1": ("gamma_gamma/*.txt", "resonance_parameter/**/AV/*.txt"),
+    "D0": ("resonance_spacing/*.txt",),
+    "D1": ("resonance_spacing/*.txt",),
+    "D2": ("resonance_spacing/*.txt",),
+    "S0": ("strength_function/*.txt",),
+    "S1": ("strength_function/*.txt",),
+    "GG0": ("gamma_gamma/*.txt",),
+    "GG1": ("gamma_gamma/*.txt",),
     "RAD": ("resonance_parameter/ARE/**/*.txt",),
     "STF": ("strength_function/*.txt",),
 }
@@ -153,12 +160,12 @@ def _resonancetables_file_path(input_store):
     if not quantity:
         return []
 
-    elem = str(input_store.get("target_elem") or "").capitalize()
-    mass = str(input_store.get("target_mass") or "")
-    target = f"{elem}{mass}"
-    directory = Path(DATA_DIR, "resonancetables", top_dir, quantity, "nuc")
-    filename_quantity = "macs" if obs_type == "MACS" else quantity
-    return _glob_text_files(directory, (f"{target}_{filename_quantity}.txt",))
+    directory = Path(RESONANCETABLES_GIT_REPO_PATH, top_dir, quantity, "all")
+    return [
+        filename
+        for filename in _glob_text_files(directory, ("*.txt",))
+        if not Path(filename).name.upper().startswith("EXFOR_")
+    ]
 
 
 def nuclide_reformat(code):
@@ -178,9 +185,26 @@ def projectile_reformat(projectile):
     return nuclide_reformat(projectile)
 
 
+def _ion_projectile_directory(projectile):
+    """Return the EXFORTABLES_py directory name for an ion projectile."""
+    projectile = str(projectile).upper()
+    if projectile == "HE3":
+        return "He3"
+
+    parts = projectile.split("-")
+    if len(parts) >= 3 and parts[0].isdigit():
+        return f"{parts[1].capitalize()}{parts[2]}"
+
+    return projectile_reformat(projectile).replace("-", "")
+
+
 def is_ion_projectile(projectile):
     projectile = str(projectile).upper()
-    if projectile in LIGHT_ION_PROJECTILES:
+    # p, d, t and alpha have their own top-level EXFORTABLES_py directories.
+    # He-3 and nuclide projectiles are stored below the shared ``i`` directory.
+    if projectile in {"P", "D", "T", "A"}:
+        return False
+    if projectile == "HE3":
         return True
     if projectile in ("0", "N", "G"):
         return False
@@ -199,6 +223,13 @@ def generate_exfortables_file_path(input_store):
 
     target = f"{elem.capitalize()}-{str(mass)}"
     exfiles = []
+    storage_obs_type = (
+        "XS" if obs_type == "GPROD" else obs_type
+    )
+    storage_dir = sf6_to_dir.get(
+        pageparam_to_sf6.get(storage_obs_type, storage_obs_type),
+        storage_obs_type.lower(),
+    )
 
     if obs_type in _EXFOR_SCALAR_GLOBS:
         reaction_dir = reaction.replace(",", "-").lower()
@@ -210,27 +241,22 @@ def generate_exfortables_file_path(input_store):
         )
         return _glob_text_files(directory, _EXFOR_SCALAR_GLOBS[obs_type])
 
-    if input_store.get("page_param") == "ion" or is_ion_projectile(
-        reaction.split(",")[0]
-    ):
-        outgoing = reaction.split(",", 1)[1].lower()
-        dir = os.path.join(
-            EXFORTABLES_PY_GIT_REPO_PATH,
-            "ion",
-            target,
-            projectile_reformat(reaction.split(",")[0]),
-            outgoing if not level_num else outgoing + "-L" + str(level_num),
-            obs_type.lower() if obs_type != "RP" else "xs",
-        )
+    projectile = reaction.split(",", 1)[0]
+    path_reaction = (
+        convert_partial_reactionstr_to_inl(reaction) if level_num else reaction
+    )
+    reaction_dir = path_reaction.replace(",", "-").lower()
+    if level_num:
+        reaction_dir += "-L" + str(level_num)
 
-    elif level_num:
-        reaction = convert_partial_reactionstr_to_inl(reaction)
+    if is_ion_projectile(projectile):
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            reaction.split(",")[0].lower(),
+            "i",
+            _ion_projectile_directory(projectile),
             target,
-            reaction.replace(",", "-").lower() + "-L" + str(level_num),
-            obs_type.lower(),
+            reaction_dir,
+            storage_dir if obs_type != "RP" else "xs",
         )
 
     elif obs_type == "FY":
@@ -247,23 +273,21 @@ def generate_exfortables_file_path(input_store):
     else:
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            reaction.split(",")[0].lower(),
+            projectile.lower(),
             target,
-            reaction.replace(",", "-").lower(),
-            obs_type.lower() if obs_type != "RP" else "xs",
+            reaction_dir,
+            storage_dir if obs_type != "RP" else "xs",
         )
 
     if obs_type == "RP":
         ## Format is "Ag-109-M"
         rp_elem = input_store.get("rp_elem")
         rp_mass = input_store.get("rp_mass")
-        residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
-
-        if not get_str_from_string(rp_mass):
-            residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}"
-
-        else:
-            residual = f"{rp_elem.capitalize()}-{str(rp_mass.lstrip('0'))}-{get_str_from_string(rp_mass).upper()}"
+        mass_number = get_number_from_string(rp_mass)
+        isomer = get_str_from_string(rp_mass)
+        residual = f"{rp_elem.capitalize()}-{mass_number}"
+        if isomer:
+            residual += f"-{isomer.upper()}"
 
         if os.path.exists(dir):
             exfiles = [os.path.join(dir, f) for f in os.listdir(dir) if residual in f]
@@ -271,6 +295,10 @@ def generate_exfortables_file_path(input_store):
     else:
         if os.path.exists(dir):
             exfiles = [os.path.join(dir, f) for f in os.listdir(dir)]
+            if obs_type == "GPROD":
+                # EXFORTABLES encodes SF4=0-G-0 as ``_G-0_`` in the file name.
+                sf4_token = "_G-0_"
+                exfiles = [f for f in exfiles if sf4_token in Path(f).name]
 
     return exfiles 
 
@@ -285,9 +313,17 @@ def generate_endftables_file_path(input_store):
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
-
+    if obs_type in EXFOR_ONLY_FILE_DOWNLOADS:
+        return []
+    # if obs_type == "GPROD":
+    #     # This curve is derived directly from archived MF=6/12/13 sections by
+    #     # endftables_sql; an MF=3/MT=202 text file is not its source.
+    #     return []
     if obs_type in _EXFOR_SCALAR_GLOBS:
         return _resonancetables_file_path(input_store)
+    storage_dir = pageparam_to_endftables_obs_type.get(obs_type)
+    if storage_dir is None:
+        return []
 
     target = f"{elem.capitalize()}{str(mass).zfill(3)}"
 
@@ -309,7 +345,7 @@ def generate_endftables_file_path(input_store):
                 target,
                 lib,
                 "tables",
-                obs_type.lower() if obs_type != "RP" else "residual",
+                storage_dir,
             )
 
         if obs_type == "RP":
@@ -327,7 +363,11 @@ def generate_endftables_file_path(input_store):
 
         else:
             if os.path.exists(dir):
-                libfiles += [os.path.join(dir, f) for f in os.listdir(dir) if f"MT{mt.zfill(3)}" in f]
+                libfiles += [
+                    os.path.join(dir, f)
+                    for f in os.listdir(dir)
+                    if f"MT{str(mt).zfill(3)}" in f
+                ]
 
     return libfiles
 
