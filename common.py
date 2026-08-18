@@ -187,21 +187,13 @@ def projectile_reformat(projectile):
 
 def _ion_projectile_directory(projectile):
     """Return the EXFORTABLES_py directory name for an ion projectile."""
-    projectile = str(projectile).upper()
-    if projectile == "HE3":
-        return "He3"
-
-    parts = projectile.split("-")
-    if len(parts) >= 3 and parts[0].isdigit():
-        return f"{parts[1].capitalize()}{parts[2]}"
-
-    return projectile_reformat(projectile).replace("-", "")
+    return projectile_reformat(projectile)
 
 
 def is_ion_projectile(projectile):
     projectile = str(projectile).upper()
     # p, d, t and alpha have their own top-level EXFORTABLES_py directories.
-    # He-3 and nuclide projectiles are stored below the shared ``i`` directory.
+    # He-3 and nuclide projectiles use the shared target-first ``ion`` layout.
     if projectile in {"P", "D", "T", "A"}:
         return False
     if projectile == "HE3":
@@ -210,6 +202,13 @@ def is_ion_projectile(projectile):
         return False
     parts = projectile.split("-")
     return len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) > 0
+
+
+def is_heavy_ion_projectile(projectile):
+    """Return whether an EXFOR projectile is a nuclide heavier than helium."""
+    projectile = str(projectile).upper()
+    parts = projectile.split("-")
+    return len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) > 2
 
 
 def generate_exfortables_file_path(input_store):
@@ -246,16 +245,18 @@ def generate_exfortables_file_path(input_store):
         convert_partial_reactionstr_to_inl(reaction) if level_num else reaction
     )
     reaction_dir = path_reaction.replace(",", "-").lower()
+    ion_reaction_dir = path_reaction.split(",", 1)[1].lower()
     if level_num:
         reaction_dir += "-L" + str(level_num)
+        ion_reaction_dir += "-L" + str(level_num)
 
     if is_ion_projectile(projectile):
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            "i",
-            _ion_projectile_directory(projectile),
+            "ion",
             target,
-            reaction_dir,
+            _ion_projectile_directory(projectile),
+            ion_reaction_dir,
             storage_dir if obs_type != "RP" else "xs",
         )
 
@@ -313,7 +314,8 @@ def generate_endftables_file_path(input_store):
     mass = input_store.get("target_mass")
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
-    if obs_type in EXFOR_ONLY_FILE_DOWNLOADS:
+    page_param = (input_store.get("page_param") or "").upper()
+    if obs_type in EXFOR_ONLY_FILE_DOWNLOADS or page_param in EXFOR_ONLY_FILE_DOWNLOADS:
         return []
     # if obs_type == "GPROD":
     #     # This curve is derived directly from archived MF=6/12/13 sections by

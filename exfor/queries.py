@@ -350,7 +350,9 @@ def _exfor_cond_xs(input_store: dict, reaction: str) -> tuple[list, str]:
     conditions += [
             exfor_indexes.c.process == reaction.replace("total", "tot").upper(),
             exfor_indexes.c.arbitrary_data == False
-        ]
+    ]
+    if input_store.get("residual"):
+        conditions.append(exfor_indexes.c.residual == input_store["residual"])
 
     outgoing = reaction.split(",", 1)[1].lower() if "," in reaction else ""
     if outgoing not in {"tot", "total", "f"}:
@@ -845,7 +847,6 @@ def ddx_product_options_query(elem, mass, projectile):
 
 
 def residual_nuclide_list(input_store):
-
     obs_type = input_store.get("obs_type").upper()
     config = EXFOR_OBS_TYPE_CONFIG[obs_type]
 
@@ -857,12 +858,20 @@ def residual_nuclide_list(input_store):
 
     queries = [
         exfor_indexes.c.target == target,
-        exfor_indexes.c.arbitrary_data == False,
         exfor_indexes.c.projectile == projectile.upper(),
-        exfor_indexes.c.sf6 == config["sf6"].upper()
+        exfor_indexes.c.sf6 == config["sf6"].upper(),
+        exfor_indexes.c.residual.is_not(None),
+        ~exfor_indexes.c.entry_id.like("V%"),
     ]
+    extra_conditions, _ = config["extra"](input_store, reaction)
+    queries.extend(extra_conditions)
 
-    stmt = select(exfor_indexes).where(and_(*queries))
+    stmt = (
+        select(exfor_indexes.c.residual)
+        .distinct()
+        .where(and_(*queries))
+        .order_by(exfor_indexes.c.residual)
+    )
 
     with engines["exfor"].connect() as conn:
         results = conn.execute(stmt).fetchall()
@@ -990,6 +999,8 @@ def data_query(input_store, entids):
         exfor_data.c.entry_id.in_(tuple(entids)),
         ~exfor_data.c.entry_id.like("V%"),
     ]
+    if input_store.get("residual"):
+        filters.append(exfor_data.c.residual == input_store["residual"])
     if input_store.get("page_param") == "trn":
         energy_range = input_store.get("energy_range") or [None, None]
         start_mev = energy_range[0] if len(energy_range) > 0 else None

@@ -83,7 +83,7 @@ sf6_to_dir: dict[str, str] = {
 
 # Pages whose downloadable source files currently come only from
 # EXFORTABLES_py.  Keep the UI and path generation on the same definition.
-EXFOR_ONLY_FILE_DOWNLOADS: frozenset = frozenset({"TRN"})
+EXFOR_ONLY_FILE_DOWNLOADS: frozenset = frozenset({"TRN", "ION"})
 
 
 # SF6 codes that represent resonance parameters
