@@ -25,6 +25,34 @@ SCALAR_OBS: frozenset = frozenset({
     "IF", "RAD", "STF",
 })
 
+# Display units follow the normalized EXFOR values returned by data_query().
+SCALAR_Y_AXIS_TITLES: dict[str, str] = {
+    "TH": "Thermal neutron cross section [barn]",
+    "RI": "Resonance integral [barn]",
+    "MACS": "Maxwellian-averaged cross section [barn]",
+    "D": "Average resonance spacing D [eV]",
+    "D0": "Average resonance spacing D₀ [eV]",
+    "D1": "Average resonance spacing D₁ [eV]",
+    "D2": "Average resonance spacing D₂ [eV]",
+    "S": "Neutron strength function S [dimensionless]",
+    "S0": "Neutron strength function S₀ [dimensionless]",
+    "S1": "Neutron strength function S₁ [dimensionless]",
+    "STF": "Neutron strength function [dimensionless]",
+    "GG": "Average radiative width ⟨Γγ⟩ [eV]",
+    "GG0": "Average radiative width ⟨Γγ⟩₀ [eV]",
+    "GG1": "Average radiative width ⟨Γγ⟩₁ [eV]",
+    "RAD": "Scattering radius R [m]",
+    "IF": "Fission resonance integral [barn]",
+}
+
+# Resonance tables use conventional scaled units for strength functions and
+# femtometres for radii. Convert them to the normalized EXFOR units above.
+RESONANCE_TABLE_TO_EXFOR_SCALE: dict[str, float] = {
+    "S0": 1e-4,
+    "S1": 1e-4,
+    "RAD": 1e-15,
+}
+
 # Total photon-production cross section identifiers shared by the page,
 # EXFOR query, and evaluated-library query.
 GAMMA_PRODUCTION_OBS_TYPE = "GPROD"

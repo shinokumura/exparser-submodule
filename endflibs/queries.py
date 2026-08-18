@@ -24,7 +24,11 @@ from endftables_sql.scripts.models_core import (
 )
 from ..utilities.util import get_number_from_string, libstyle_nuclide_expression
 from ..utilities.elem import elemtoz
-from ..utilities.obs_types import GAMMA_PRODUCTION_OBS_TYPE, SCALAR_OBS
+from ..utilities.obs_types import (
+    GAMMA_PRODUCTION_OBS_TYPE,
+    RESONANCE_TABLE_TO_EXFOR_SCALE,
+    SCALAR_OBS,
+)
 
 
 
@@ -255,7 +259,12 @@ def lib_data_query(input_store, ids):
         inc_pt = input_store["reaction"].split(",")[0].lower()
         return lib_residual_data_query(inc_pt, ids)
     elif obs_type in SCALAR_OBS:
-        return lib_resonance_data_query(ids)
+        df = lib_resonance_data_query(ids)
+        scale = RESONANCE_TABLE_TO_EXFOR_SCALE.get(obs_type)
+        if scale is not None and not df.empty:
+            df = df.copy()
+            df[["value", "dvalue"]] = df[["value", "dvalue"]] * scale
+        return df
 
     return pd.DataFrame()
 
@@ -677,7 +686,19 @@ def get_reaction_list(input_store):
 
     conditions = []
 
-    conditions.append(endf_reactions.c.obs_type == obs_type)
+    if obs_type == "xs":
+        conditions.append(
+            endf_reactions.c.obs_type.in_(
+                [
+                    obs_type,
+                    LIB_OBS_TYPE_CONDITION[GAMMA_PRODUCTION_OBS_TYPE][
+                        "db_obs_type"
+                    ],
+                ]
+            )
+        )
+    else:
+        conditions.append(endf_reactions.c.obs_type == obs_type)
 
     evaluations = input_store.get("evaluation")
     if evaluations:
