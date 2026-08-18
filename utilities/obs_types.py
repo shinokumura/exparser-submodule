@@ -25,12 +25,11 @@ SCALAR_OBS: frozenset = frozenset({
     "IF", "RAD", "STF",
 })
 
-# Total photon-production cross section.  EXFOR identifies the inclusive
-# emitted photon in SF4.  The evaluated curve is constructed from MF=6/12/13
-# and indexed with the conventional production MT=202 identifier.
-# Keep these identifiers together so the UI and database adapters cannot drift.
-# GAMMA_PRODUCTION_OBS_TYPE = "GPROD"
+# Total photon-production cross section identifiers shared by the page,
+# EXFOR query, and evaluated-library query.
+GAMMA_PRODUCTION_OBS_TYPE = "GPROD"
 GAMMA_PRODUCTION_SF4 = "0-G-0"
+GAMMA_PRODUCTION_MT = 202
 
 # Mapping from per-L obs_type to expected Momentum-L integer value.
 # Used to post-filter EXFOR data fetched for D0/D1/D2 and S0/S1.

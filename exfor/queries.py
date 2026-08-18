@@ -45,8 +45,10 @@ from ..utilities.reaction import (
     convert_reaction_to_exfor_style,
 )
 from ..utilities.obs_types import (
-    SCALAR_OBS,
+    GAMMA_PRODUCTION_OBS_TYPE,
+    GAMMA_PRODUCTION_SF4,
     L_WAVE_OBS,
+    SCALAR_OBS,
 )
 
 
@@ -370,30 +372,23 @@ def _exfor_cond_xs(input_store: dict, reaction: str) -> tuple[list, str]:
                 ),
             )
         )
-
     return conditions, reaction
 
 
 def _exfor_cond_gamma_production(
     input_store: dict, reaction: str
 ) -> tuple[list, str]:
-    """Select inclusive total photon-production cross sections.
-
-    SF5=PAR denotes a cross section for an individual gamma line and is not
-    comparable with ENDF MT=202, so only unbranched SF5 records are selected.
-    """
-    conditions = []
-    projectile = str(input_store.get("inc_pt") or reaction.split(",", 1)[0]).upper()
+    """Select inclusive total photon-production cross sections."""
+    projectile = str(
+        input_store.get("inc_pt") or reaction.split(",", 1)[0]
+    ).upper()
     reaction = f"{projectile},X"
-    if input_store.get("excl_junk_switch"):
-        conditions.append(exfor_indexes.c.sf5 == None)
-    conditions += [
+    return [
         exfor_indexes.c.process == reaction,
-        exfor_indexes.c.sf4 == "0-G-0",
+        exfor_indexes.c.sf4 == GAMMA_PRODUCTION_SF4,
+        exfor_indexes.c.sf5.is_(None),
         exfor_indexes.c.arbitrary_data == False,
-    ]
-
-    return conditions, reaction
+    ], reaction
 
 
 def _exfor_cond_th(input_store: dict, reaction: str) -> tuple[list, str]:
@@ -496,8 +491,6 @@ def _exfor_cond_sgv(input_store: dict, reaction: str) -> tuple[list, str]:
         exfor_indexes.c.y_unit == "CM3/S/MOL",
         exfor_indexes.c.arbitrary_data == False,
     ], reaction
-
-
 def _exfor_cond_gg(input_store: dict, reaction: str) -> tuple[list, str]:
     """Extra conditions for gamma-gamma width (GG) queries.
     GG entries carry sf6='WID' and sf8='AV' (averaged over resolved resonances).
@@ -606,7 +599,7 @@ def _exfor_cond_rad(input_store: dict, reaction: str) -> tuple[list, str]:
 # To add a new observable: add one entry here and implement its condition builder above.
 EXFOR_OBS_TYPE_CONFIG: dict = {
     "XS":   {"sf6": "SIG", "extra": _exfor_cond_xs,           "fixed_sf8": False},
-    "GPROD": {
+    GAMMA_PRODUCTION_OBS_TYPE: {
         "sf6": "SIG",
         "extra": _exfor_cond_gamma_production,
         "fixed_sf8": False,
@@ -618,6 +611,7 @@ EXFOR_OBS_TYPE_CONFIG: dict = {
     "TH":   {"sf6": "SIG", "extra": _exfor_cond_th,           "fixed_sf8": False},  # energy filter applied in data_query
     "RI":   {"sf6": "RI",  "extra": _exfor_cond_ri,           "fixed_sf8": False},
     "MACS": {"sf6": "SIG", "extra": _exfor_cond_macs,         "fixed_sf8": True},   # sf8=MXW/* set by builder
+    "SF":   {"sf6": "SIG", "extra": _exfor_cond_sfactor,       "fixed_sf8": True},   # API astrophysical S factor
     "SFC":  {"sf6": "SIG", "extra": _exfor_cond_sfactor,      "fixed_sf8": True},   # astrophysical S factor, sf8=SFC/*
     "SGV":  {"sf6": "SGV", "extra": _exfor_cond_sgv,          "fixed_sf8": True},   # thermonuclear reaction rate
     # Per-quantity aliases — same EXFOR conditions as their parent type;
@@ -720,13 +714,15 @@ def exfor_available_reactions_query(obs_type, elem, mass, projectile):
         ~exfor_indexes.c.entry_id.like("V%"),
     ]
 
-    if obs_type in {"XS", "DA", "DDX", "GPROD"}:
+    if obs_type in {"XS", "DA", "DDX", GAMMA_PRODUCTION_OBS_TYPE}:
         queries.append(exfor_indexes.c.arbitrary_data == False)
+    if obs_type == "SF":
+        queries.append(exfor_indexes.c.sf8.like("SFC%"))
 
-    if obs_type == "GPROD":
+    if obs_type == GAMMA_PRODUCTION_OBS_TYPE:
         queries.extend([
             exfor_indexes.c.process == f"{projectile},X",
-            exfor_indexes.c.sf4 == "0-G-0",
+            exfor_indexes.c.sf4 == GAMMA_PRODUCTION_SF4,
             exfor_indexes.c.sf5.is_(None),
         ])
     if obs_type == "SFC":
@@ -774,13 +770,13 @@ def exfor_available_projectiles_query(obs_type, elem=None, mass=None, exclude_pr
     if elem and mass:
         queries.append(exfor_indexes.c.target == x4style_nuclide_expression(elem, mass))
 
-    if obs_type in {"XS", "DA", "DDX", "GPROD"}:
+    if obs_type in {"XS", "DA", "DDX", GAMMA_PRODUCTION_OBS_TYPE}:
         queries.append(exfor_indexes.c.arbitrary_data == False)
 
-    if obs_type == "GPROD":
+    if obs_type == GAMMA_PRODUCTION_OBS_TYPE:
         queries.extend([
             exfor_indexes.c.process == exfor_indexes.c.projectile + ",X",
-            exfor_indexes.c.sf4 == "0-G-0",
+            exfor_indexes.c.sf4 == GAMMA_PRODUCTION_SF4,
             exfor_indexes.c.sf5.is_(None),
         ])
     if obs_type == "SF":
@@ -912,6 +908,60 @@ def entry_query_by_id(entries):
     return df
 
 
+def entry_metadata_query(entries):
+    """Return bibliography, DOI, and revision metadata for selected entries."""
+    entries = tuple(dict.fromkeys(str(entry)[:5] for entry in entries if entry))
+    if not entries:
+        return pd.DataFrame()
+
+    history_columns = set(exfor_histories.c.keys())
+    recorded_at_expr = (
+        func.max(exfor_histories.c.recorded_at).label("recorded_at")
+        if "recorded_at" in history_columns
+        else literal(None).label("recorded_at")
+    )
+    history_count_column = (
+        exfor_histories.c.id
+        if "id" in history_columns
+        else exfor_histories.c.hash
+        if "hash" in history_columns
+        else exfor_histories.c.entry
+    )
+
+    stmt = (
+        select(
+            exfor_bib.c.entry,
+            exfor_bib.c.first_author_institute,
+            exfor_bib.c.title,
+            func.max(exfor_entry_dois.c.main_reference_doi).label("main_doi"),
+            recorded_at_expr,
+            func.count(distinct(history_count_column)).label("n_history"),
+        )
+        .select_from(
+            exfor_bib
+            .join(
+                exfor_entry_dois,
+                exfor_entry_dois.c.entry == exfor_bib.c.entry,
+                isouter=True,
+            )
+            .join(
+                exfor_histories,
+                exfor_histories.c.entry == exfor_bib.c.entry,
+                isouter=True,
+            )
+        )
+        .where(exfor_bib.c.entry.in_(entries))
+        .group_by(
+            exfor_bib.c.entry,
+            exfor_bib.c.first_author_institute,
+            exfor_bib.c.title,
+        )
+    )
+
+    with engines["exfor"].connect() as connection:
+        return pd.read_sql(stmt, connection)
+
+
 def reaction_query_by_id(entries):
     stmt = select(exfor_reactions).where(exfor_reactions.c.entry.in_(entries))
 
@@ -990,7 +1040,7 @@ def data_query(input_store, entids):
     obs_type = input_store.get("obs_type", "").upper()
     level_num = input_store.get("level_num")
 
-    if obs_type in {"XS", "SF", "GPROD"}:
+    if obs_type in {"XS", "SF", GAMMA_PRODUCTION_OBS_TYPE}:
         obs_type = "SIG"
     elif obs_type == "DDX":
         obs_type = "DA/DE"

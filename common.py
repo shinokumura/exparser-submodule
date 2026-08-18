@@ -22,12 +22,13 @@ from config import (
     RESONANCETABLES_GIT_REPO_PATH,
 )
 from submodules.utilities.elem import elemtoz
-from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 from submodules.utilities.obs_types import (
     EXFOR_ONLY_FILE_DOWNLOADS,
+    GAMMA_PRODUCTION_OBS_TYPE,
     GAMMA_PRODUCTION_SF4,
     sf6_to_dir,
 )
+from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
 from submodules.utilities.util import get_str_from_string, get_number_from_string
 
 
@@ -213,6 +214,9 @@ def is_heavy_ion_projectile(projectile):
 
 def generate_exfortables_file_path(input_store):
     obs_type = (input_store.get("obs_type") or "").upper()
+    storage_obs_type = (
+        "XS" if obs_type == GAMMA_PRODUCTION_OBS_TYPE else obs_type
+    )
     elem = input_store.get("target_elem")
     mass = input_store.get("target_mass")
     branch = input_store.get("branch")
@@ -222,9 +226,6 @@ def generate_exfortables_file_path(input_store):
 
     target = f"{elem.capitalize()}-{str(mass)}"
     exfiles = []
-    storage_obs_type = (
-        "XS" if obs_type == "GPROD" else obs_type
-    )
     storage_dir = sf6_to_dir.get(
         pageparam_to_sf6.get(storage_obs_type, storage_obs_type),
         storage_obs_type.lower(),
@@ -296,10 +297,11 @@ def generate_exfortables_file_path(input_store):
     else:
         if os.path.exists(dir):
             exfiles = [os.path.join(dir, f) for f in os.listdir(dir)]
-            if obs_type == "GPROD":
-                # EXFORTABLES encodes SF4=0-G-0 as ``_G-0_`` in the file name.
-                sf4_token = "_G-0_"
-                exfiles = [f for f in exfiles if sf4_token in Path(f).name]
+            if obs_type == GAMMA_PRODUCTION_OBS_TYPE:
+                sf4_token = f"_{GAMMA_PRODUCTION_SF4.split('-', 1)[1]}_"
+                exfiles = [
+                    file for file in exfiles if sf4_token in Path(file).name
+                ]
 
     return exfiles 
 
@@ -315,12 +317,12 @@ def generate_endftables_file_path(input_store):
     reaction = input_store.get("reaction")
     mt = input_store.get("mt")
     page_param = (input_store.get("page_param") or "").upper()
-    if obs_type in EXFOR_ONLY_FILE_DOWNLOADS or page_param in EXFOR_ONLY_FILE_DOWNLOADS:
+    if (
+        obs_type == GAMMA_PRODUCTION_OBS_TYPE
+        or obs_type in EXFOR_ONLY_FILE_DOWNLOADS
+        or page_param in EXFOR_ONLY_FILE_DOWNLOADS
+    ):
         return []
-    # if obs_type == "GPROD":
-    #     # This curve is derived directly from archived MF=6/12/13 sections by
-    #     # endftables_sql; an MF=3/MT=202 text file is not its source.
-    #     return []
     if obs_type in _EXFOR_SCALAR_GLOBS:
         return _resonancetables_file_path(input_store)
     storage_dir = pageparam_to_endftables_obs_type.get(obs_type)

@@ -24,7 +24,7 @@ from endftables_sql.scripts.models_core import (
 )
 from ..utilities.util import get_number_from_string, libstyle_nuclide_expression
 from ..utilities.elem import elemtoz
-from ..utilities.obs_types import SCALAR_OBS
+from ..utilities.obs_types import GAMMA_PRODUCTION_OBS_TYPE, SCALAR_OBS
 
 
 
@@ -95,7 +95,7 @@ def _lib_cond_trn(input_store: dict) -> list:
 # db_obs_type=None means no endf_reactions entry — use resonancetable_data instead.
 LIB_OBS_TYPE_CONDITION: dict = {
     "XS":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
-    "GPROD": {
+    GAMMA_PRODUCTION_OBS_TYPE: {
         "db_obs_type": "gamma_production",
         "extra": _lib_cond_mt,
     },
@@ -241,7 +241,7 @@ def lib_residual_nuclide_list(elem, mass, inc_pt):
 
 def lib_data_query(input_store, ids):
     obs_type = input_store["obs_type"].upper()
-    if obs_type in {"XS", "GPROD"}:
+    if obs_type in {"XS", GAMMA_PRODUCTION_OBS_TYPE}:
         return lib_xs_data_query(ids, thermal=False)
     elif obs_type in {"SF", "SFC"}:
         return lib_sfactor_data_query(input_store, ids)
