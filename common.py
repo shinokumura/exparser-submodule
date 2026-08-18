@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 
 from config import (
+    DATA_DIR,
     ENDFTABLES_PATH,
     EXFORTABLES_PY_GIT_REPO_PATH,
     RESONANCETABLES_GIT_REPO_PATH,
@@ -139,6 +140,21 @@ def _glob_text_files(root, patterns):
     return sorted(
         {str(path) for pattern in patterns for path in root.glob(pattern) if path.is_file()}
     )
+
+
+def download_source_path(filename):
+    """Return the Data Explorer download source and source-relative path."""
+    path = Path(filename).absolute()
+    source_roots = (
+        ("exfortables_py", Path(EXFORTABLES_PY_GIT_REPO_PATH).absolute()),
+        ("resonancetables", Path(RESONANCETABLES_GIT_REPO_PATH).absolute()),
+        ("endftables", Path(ENDFTABLES_PATH).absolute()),
+        ("data", Path(DATA_DIR).absolute()),
+    )
+    for source, root in source_roots:
+        if path.is_relative_to(root):
+            return source, path.relative_to(root)
+    return None, None
 
 
 def _resonancetables_file_path(input_store):
