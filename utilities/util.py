@@ -88,7 +88,6 @@ def flatten_list(list):
 def dict_merge(dicts_list):
     d = {**dicts_list[0]}
     for entry in dicts_list[1:]:
-        # print("entry:", entry)
         for k, v in entry.items():
             d[k] = (
                 [d[k], v]

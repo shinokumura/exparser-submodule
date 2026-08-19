@@ -561,7 +561,7 @@ def reaction_list(projectile):
     all_reactions = {
         ("N" if (projectile.upper() != "N" and k == "INL" and i.get("endf")) else k): i
         for k, i in sf3_dict.items()
-        if i.get("endf")  # ★ ここで endf=True のみにフィルタ
+        if i.get("endf")  # Keep only entries available in ENDF data.
     }
 
     partial = {}
@@ -595,12 +595,12 @@ def exfor_reaction_list(projectile):
 
 
 def get_mf(reaction):
-    # dict ならキーから取り出す
+    # Read fields directly from a reaction mapping.
     if isinstance(reaction, dict):
         sf6 = reaction.get("sf6")
         sf4 = reaction.get("sf4")
     else:
-        # 文字列は "sf6,sf4" の形式を想定
+        # Otherwise expect a string in "sf6,sf4" format.
         parts = reaction.split(",")
         sf6 = parts[0].strip()
         sf4 = parts[1].strip() if len(parts) > 1 else None
@@ -690,7 +690,6 @@ def generate_mt_list(projectile):
                 partial[str(mt_range[p.upper()][n])] = (
                     f"{projectile.lower()},{p.lower()}{str(n)}"
                 )
-    # print(all, partial)
     return dict(**all, **partial)
 
 

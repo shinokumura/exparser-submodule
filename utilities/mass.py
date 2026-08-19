@@ -15,7 +15,6 @@
 #     mass_range = {}
 #     with open(MASS_RANGE_FILE) as f:
 #         for z in f.readlines():
-#             print(z)
 #             if z.startswith("#"):
 #                 continue
 #             z_mass = z.split(",")

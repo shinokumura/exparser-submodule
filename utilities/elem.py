@@ -147,7 +147,6 @@ def ztoelem(z):
             elem_name = ELEMS[z]
         except ValueError:
             elem_name = ""
-    # print(elem_name.capitalize())
     # return elem_name.upper()
     return elem_name.capitalize()
 
