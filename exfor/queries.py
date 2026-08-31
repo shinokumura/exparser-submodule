@@ -445,6 +445,9 @@ def _exfor_cond_da(input_store: dict, reaction: str) -> tuple[list, str]:
     if isinstance(level_num, int):
         reaction = convert_partial_reactionstr_to_inl(reaction)
         conditions += [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
+    conditions.append(
+        exfor_indexes.c.process == reaction.replace("total", "tot").upper()
+    )
     return conditions, reaction
 
 
@@ -532,7 +535,9 @@ def _exfor_cond_ri(input_store: dict, reaction: str):
 
 
 def _exfor_cond_de(input_store, reaction):
-    return [], ""
+    return [
+        exfor_indexes.c.process == reaction.replace("total", "tot").upper()
+    ], reaction
 
 
 def _exfor_cond_trn(input_store: dict, reaction: str) -> tuple[list, str]:
@@ -565,6 +570,9 @@ def _exfor_cond_ddx(input_store: dict, reaction: str) -> tuple[list, str]:
     if isinstance(level_num, int):
         reaction = convert_partial_reactionstr_to_inl(reaction)
         conditions += [exfor_indexes.c.sf5 == "PAR", exfor_indexes.c.level_num == level_num]
+    conditions.append(
+        exfor_indexes.c.process == reaction.replace("total", "tot").upper()
+    )
     return conditions, reaction
 
 
