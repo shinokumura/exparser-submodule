@@ -1,6 +1,7 @@
 import importlib
 from functools import lru_cache
 import math
+import re
 import numpy as np
 import pandas as pd
 from sqlalchemy import select, and_, distinct, text
@@ -29,6 +30,7 @@ from ..utilities.obs_types import (
     RESONANCE_TABLE_TO_EXFOR_SCALE,
     SCALAR_OBS,
 )
+from ..utilities.reaction import get_endf_mts
 
 
 
@@ -39,17 +41,17 @@ from ..utilities.obs_types import (
 def _lib_cond_mt(input_store: dict) -> list:
     """Extra conditions for obs types that support MT filtering (XS, TH, DA, FY).
 
-    For level-specific inelastic reactions (e.g. n,inl1 / n,inl2) get_mt()
-    returns None because the level suffix is not in the reaction table.  Map
-    level_num → MT via the ENDF convention MT = 50 + level_num so the library
-    query stays narrow (MT 51 for level 1, MT 52 for level 2, …).
+    The shared MT resolver expands inclusive inelastic reactions to their
+    discrete-level MT range and keeps level-specific reactions narrow.
     """
-    mt = input_store.get("mt")
-    if mt is None:
-        level_num = input_store.get("level_num")
-        if level_num is not None:
-            mt = 50 + int(level_num)
-    return [endf_reactions.c.mt == int(mt)] if mt else []
+    mts = get_endf_mts(
+        input_store.get("reaction"),
+        input_store.get("mt"),
+        input_store.get("level_num"),
+    )
+    if len(mts) == 1:
+        return [endf_reactions.c.mt == mts[0]]
+    return [endf_reactions.c.mt.in_(mts)] if mts else []
 
 
 def _lib_cond_residual(input_store: dict) -> list:
@@ -298,14 +300,25 @@ _SFACTOR_PROJECTILES = {
 }
 
 
+def _sfactor_projectile_properties(projectile):
+    projectile_key = str(projectile or "").upper()
+    properties = _SFACTOR_PROJECTILES.get(projectile_key)
+    if properties is not None:
+        return properties
+
+    match = re.fullmatch(r"(\d+)-[A-Z]+-(\d+)(?:-[A-Z0-9]+)?", projectile_key)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None
+
+
 def sfactor_system_properties(target_elem, target_mass, projectile):
     """Return charges, reduced mass, and the lab-to-CM energy factor.
 
     Nuclear masses are approximated by mass numbers, consistently with the
     nuclide information already used elsewhere in Data Explorer.
     """
-    projectile_key = str(projectile or "").upper()
-    projectile_properties = _SFACTOR_PROJECTILES.get(projectile_key)
+    projectile_properties = _sfactor_projectile_properties(projectile)
     target_elem = str(target_elem or "")
     target_z = (
         target_elem
@@ -331,8 +344,9 @@ def sfactor_system_properties(target_elem, target_mass, projectile):
 def construct_sfactor_from_xs(xs_df, target_elem, target_mass, projectile):
     """Construct an astrophysical S factor from evaluated cross sections.
 
-    ``endf_xs_data`` stores laboratory incident energy in MeV and cross
-    section in barns.  The returned ``en_inc`` is center-of-mass energy in
+    Input energy is in MeV and cross section is in barns. Evaluated data are
+    laboratory-frame by default; EXFOR rows marked ``CM`` remain in the
+    center-of-mass frame. The returned ``en_inc`` is center-of-mass energy in
     MeV and ``data`` is S(E) in eV*barn.
     """
     if xs_df is None or xs_df.empty:
@@ -348,7 +362,12 @@ def construct_sfactor_from_xs(xs_df, target_elem, target_mass, projectile):
     df = xs_df.copy()
     lab_energy = pd.to_numeric(df["en_inc"], errors="coerce")
     cross_section = pd.to_numeric(df["data"], errors="coerce")
-    cm_energy = lab_energy * properties["lab_to_cm"]
+    if "en_inc_frame" in df.columns:
+        frames = df["en_inc_frame"].fillna("").astype(str).str.upper()
+        energy_factor = np.where(frames == "CM", 1.0, properties["lab_to_cm"])
+    else:
+        energy_factor = np.full(len(df), properties["lab_to_cm"])
+    cm_energy = lab_energy * energy_factor
 
     valid = (
         lab_energy.notna()
@@ -386,8 +405,22 @@ def construct_sfactor_from_xs(xs_df, target_elem, target_mass, projectile):
 
     df["en_inc_lab"] = lab_energy.to_numpy()
     df["en_inc"] = cm_energy.to_numpy()
+    if "den_inc" in df.columns:
+        df["den_inc"] = (
+            pd.to_numeric(df["den_inc"], errors="coerce").to_numpy()
+            * np.asarray(energy_factor)[valid.to_numpy()]
+        )
     df["xs_data"] = cross_section.to_numpy()
     df["data"] = sfactor
+    if "ddata" in df.columns:
+        xs_uncertainty = pd.to_numeric(df["ddata"], errors="coerce").to_numpy()
+        relative_uncertainty = np.divide(
+            xs_uncertainty,
+            cross_section.to_numpy(),
+            out=np.full(len(df), np.nan),
+            where=cross_section.to_numpy() > 0,
+        )
+        df["ddata"] = sfactor * relative_uncertainty
     df["sfactor_unit"] = "eV*b"
     df["reduced_mass_u"] = properties["reduced_mass_u"]
     return df[np.isfinite(df["data"])].reset_index(drop=True)
@@ -455,23 +488,32 @@ def lib_da_data_query(ids):
 
 
 def lib_da_distinct_query(ids):
-    """Return distinct (reaction_id, en_inc, angle) without data values.
-    Used to populate slicer dropdowns without loading the full dataset."""
-    stmt = (
-        select(
-            endf_angle_data.c.reaction_id,
-            endf_angle_data.c.en_inc,
-            endf_angle_data.c.angle,
-        )
-        .where(endf_angle_data.c.reaction_id.in_(ids))
+    """Return the independent DA energy and angle values used by the slicers.
+
+    The slicers do not need every ``(reaction_id, en_inc, angle)`` combination.
+    Selecting those combinations can produce millions of rows for one target,
+    so ask SQLite to deduplicate each axis before transferring the results.
+    """
+    id_condition = endf_angle_data.c.reaction_id.in_(ids)
+    energy_stmt = (
+        select(endf_angle_data.c.en_inc)
+        .where(id_condition)
         .distinct()
+        .order_by(endf_angle_data.c.en_inc)
+    )
+    angle_stmt = (
+        select(endf_angle_data.c.angle)
+        .where(id_condition)
+        .distinct()
+        .order_by(endf_angle_data.c.angle)
     )
     with engines["endftables"].connect() as conn:
-        df = pd.DataFrame(
-            conn.execute(stmt).fetchall(),
-            columns=["reaction_id", "en_inc", "angle"],
-        )
-    return df
+        energies = conn.execute(energy_stmt).scalars().all()
+        angles = conn.execute(angle_stmt).scalars().all()
+    return pd.DataFrame({
+        "en_inc": pd.Series(energies, dtype=float),
+        "angle": pd.Series(angles, dtype=float),
+    })
 
 
 def lib_da_data_query_at_energy(ids, en_target):

@@ -762,6 +762,22 @@ def e_lvl_to_mt(level_num, process):
         return max(mt_range[out_part])
 
 
+def get_endf_mts(reaction, mt=None, level_num=None):
+    """Return the ENDF MT values represented by a reaction-page selection."""
+    projectile, outgoing = str(reaction).upper().split(",", 1)
+    projectile = "H" if projectile == "HE3" else projectile
+
+    if level_num is not None:
+        process = convert_partial_reactionstr_to_inl(reaction)
+        level_mt = e_lvl_to_mt(level_num, process)
+        return (level_mt,) if level_mt is not None else ()
+
+    if outgoing == "INL":
+        return tuple(mt_range.get(projectile, ()))
+
+    return (int(mt),) if mt is not None else ()
+
+
 def mt_to_process(projectile, type, mt):
     if type == "residual":
         return "x"

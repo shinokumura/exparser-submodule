@@ -14,6 +14,7 @@
 
 import os
 import json
+import re
 from pathlib import Path
 
 from config import (
@@ -29,8 +30,15 @@ from submodules.utilities.obs_types import (
     GAMMA_PRODUCTION_SF4,
     sf6_to_dir,
 )
-from submodules.utilities.reaction import convert_partial_reactionstr_to_inl
-from submodules.utilities.util import get_str_from_string, get_number_from_string
+from submodules.utilities.reaction import (
+    convert_partial_reactionstr_to_inl,
+    get_endf_mts,
+)
+from submodules.utilities.util import (
+    get_number_from_string,
+    get_str_from_string,
+    libstyle_nuclide_expression,
+)
 
 
 def open_json(file):
@@ -64,6 +72,7 @@ LIB_LIST_MAX = {
 pageparam_to_sf6 = {
     "XS": "SIG",
     "GPROD": "SIG",
+    "SFC": "SIG",
     "TH": "SIG",
     "RP": "SIG",
     "FY": "FY",
@@ -77,6 +86,7 @@ pageparam_to_sf6 = {
 pageparam_to_endftables_obs_type = {
     "XS": "xs",
     "GPROD": "xs",
+    "SFC": "xs",
     "TH": "xs",
     "RP": "residual",
     "FY": "fission",
@@ -142,6 +152,42 @@ def _glob_text_files(root, patterns):
     )
 
 
+def _exfor_file_energy_range(filename):
+    """Read an energy-resolved EXFOR file's incident-energy range in MeV."""
+    path = Path(filename)
+    match = re.search(r"_E([0-9.eE+-]+)_", path.name)
+    if match:
+        energy = float(match.group(1)) / 1e6
+        return energy, energy
+    try:
+        with path.open(encoding="utf-8") as stream:
+            for _ in range(30):
+                line = stream.readline()
+                if not line:
+                    break
+                match = re.match(
+                    r"#\s*Incident energy:\s*([0-9.eE+-]+)\s*MeV"
+                    r"(?:\s*-\s*([0-9.eE+-]+)\s*MeV)?",
+                    line,
+                )
+                if match:
+                    lower = float(match.group(1))
+                    upper = float(match.group(2) or match.group(1))
+                    return min(lower, upper), max(lower, upper)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+    return None
+
+
+def _distance_to_energy_range(target, energy_range):
+    lower, upper = energy_range
+    if target < lower:
+        return lower - target
+    if target > upper:
+        return target - upper
+    return 0
+
+
 def download_source_path(filename):
     """Return the Data Explorer download source and source-relative path."""
     path = Path(filename).absolute()
@@ -177,12 +223,12 @@ def _resonancetables_file_path(input_store):
     if not quantity:
         return []
 
-    directory = Path(RESONANCETABLES_GIT_REPO_PATH, top_dir, quantity, "all")
-    return [
-        filename
-        for filename in _glob_text_files(directory, ("*.txt",))
-        if not Path(filename).name.upper().startswith("EXFOR_")
-    ]
+    nuclide = libstyle_nuclide_expression(
+        input_store.get("target_elem"),
+        input_store.get("target_mass"),
+    )
+    directory = Path(RESONANCETABLES_GIT_REPO_PATH, top_dir, quantity, "nuc")
+    return _glob_text_files(directory, (f"{nuclide}_*.txt",))
 
 
 def nuclide_reformat(code):
@@ -307,8 +353,51 @@ def generate_exfortables_file_path(input_store):
         if isomer:
             residual += f"-{isomer.upper()}"
 
-        if os.path.exists(dir):
-            exfiles = [os.path.join(dir, f) for f in os.listdir(dir) if residual in f]
+        # RP index results are selected by residual nuclide, not by one
+        # process directory.  For example, a p,x search can contain both p,x
+        # and p,2n datasets, so search all reaction directories for this
+        # target/projectile and let the shared EXFOR entry IDs select the same
+        # datasets that are loaded into the plot.
+        if is_ion_projectile(projectile):
+            projectile_root = Path(
+                EXFORTABLES_PY_GIT_REPO_PATH,
+                "ion",
+                target,
+                _ion_projectile_directory(projectile),
+            )
+        else:
+            projectile_root = Path(
+                EXFORTABLES_PY_GIT_REPO_PATH,
+                projectile.lower(),
+                target,
+            )
+        exfiles = [
+            str(file)
+            for file in projectile_root.glob("*/xs/*.txt")
+            if residual in file.name
+        ]
+
+    elif (
+        obs_type == "DA"
+        and level_num is None
+        and reaction.split(",", 1)[1].lower() == "inl"
+    ):
+        if is_ion_projectile(projectile):
+            reaction_root = Path(
+                EXFORTABLES_PY_GIT_REPO_PATH,
+                "ion",
+                target,
+                _ion_projectile_directory(projectile),
+            )
+            reaction_pattern = "inl*/angle/*.txt"
+        else:
+            reaction_root = Path(
+                EXFORTABLES_PY_GIT_REPO_PATH,
+                projectile.lower(),
+                target,
+            )
+            reaction_pattern = f"{projectile.lower()}-inl*/angle/*.txt"
+        exfiles = [str(file) for file in reaction_root.glob(reaction_pattern)]
 
     else:
         if os.path.exists(dir):
@@ -318,6 +407,82 @@ def generate_exfortables_file_path(input_store):
                 exfiles = [
                     file for file in exfiles if sf4_token in Path(file).name
                 ]
+
+    if (
+        obs_type in {"DA", "DDX"}
+        and input_store.get("inc_en") is not None
+    ):
+        target_energy = float(input_store["inc_en"])
+        tolerance_pct = float(
+            input_store.get("inc_en_tolerance_pct") or 0
+        )
+        tolerance = max(
+            abs(target_energy) * tolerance_pct / 100,
+            1e-12,
+        )
+        matching_files = []
+        for file in exfiles:
+            energy_range = _exfor_file_energy_range(file)
+            if (
+                energy_range is not None
+                and energy_range[0] <= target_energy + tolerance
+                and energy_range[1] >= target_energy - tolerance
+            ):
+                matching_files.append(file)
+        exfiles = matching_files
+
+    entry_ids = input_store.get("exfor_entry_ids")
+    if entry_ids is not None:
+        entry_ids = {str(entry_id) for entry_id in entry_ids}
+        exfiles = [
+            file
+            for file in exfiles
+            if any(entry_id in Path(file).name for entry_id in entry_ids)
+        ]
+        if obs_type == "DA" and input_store.get("inc_en") is not None:
+            target_energy = float(input_store["inc_en"])
+            nearest_files = []
+            for entry_id in entry_ids:
+                entry_files = [
+                    file for file in exfiles if entry_id in Path(file).name
+                ]
+                energy_ranges = {
+                    file: energy_range
+                    for file in entry_files
+                    if (energy_range := _exfor_file_energy_range(file))
+                    is not None
+                }
+                if energy_ranges:
+                    nearest_distance = min(
+                        _distance_to_energy_range(target_energy, energy_range)
+                        for energy_range in energy_ranges.values()
+                    )
+                    nearest_files.extend(
+                        file
+                        for file, energy_range in energy_ranges.items()
+                        if _distance_to_energy_range(
+                            target_energy,
+                            energy_range,
+                        ) == nearest_distance
+                    )
+            exfiles = nearest_files
+    if obs_type == "FY" and input_store.get("energy_range"):
+        lower, upper = map(float, input_store["energy_range"])
+        exfiles = [
+            file
+            for file in exfiles
+            if (
+                (energy_range := _exfor_file_energy_range(file)) is not None
+                and energy_range[1] >= lower
+                and energy_range[0] < upper
+            )
+        ]
+    selected_residual = input_store.get("residual")
+    if selected_residual:
+        residual_token = f"_{selected_residual}_"
+        exfiles = [
+            file for file in exfiles if residual_token in Path(file).name
+        ]
 
     return exfiles 
 
@@ -347,8 +512,20 @@ def generate_endftables_file_path(input_store):
 
     target = f"{elem.capitalize()}{str(mass).zfill(3)}"
 
+    selected_libraries = input_store.get("selected_libraries")
+    libraries = (
+        [lib for lib in selected_libraries if lib in LIB_LIST_MAX]
+        if selected_libraries
+        else LIB_LIST_MAX
+    )
+    mts = get_endf_mts(
+        reaction,
+        mt,
+        input_store.get("level_num"),
+    )
+    mt_tokens = {f"MT{value:03d}" for value in mts}
     libfiles = []
-    for lib in LIB_LIST_MAX:
+    for lib in libraries:
         if obs_type == "FY":
             dir = os.path.join(
                 ENDFTABLES_PATH,
@@ -386,8 +563,29 @@ def generate_endftables_file_path(input_store):
                 libfiles += [
                     os.path.join(dir, f)
                     for f in os.listdir(dir)
-                    if f"MT{str(mt).zfill(3)}" in f
+                    if any(token in f for token in mt_tokens)
                 ]
+
+    if obs_type == "DA" and input_store.get("inc_en") is not None:
+        target_energy = float(input_store["inc_en"])
+        matching_files = []
+        for file in libfiles:
+            match = re.search(r"-Eang([0-9.]+)\.", Path(file).name)
+            if match and abs(float(match.group(1)) - target_energy) <= 5e-4:
+                matching_files.append(file)
+        libfiles = matching_files
+
+    if obs_type == "FY" and input_store.get("energy_range"):
+        lower, upper = map(float, input_store["energy_range"])
+        matching_files = []
+        for file in libfiles:
+            match = re.search(
+                r"-E([0-9.eE+-]+)\.",
+                Path(file).name,
+            )
+            if match and lower <= float(match.group(1)) < upper:
+                matching_files.append(file)
+        libfiles = matching_files
 
     return libfiles
 

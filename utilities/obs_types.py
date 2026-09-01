@@ -96,7 +96,7 @@ sf6_to_dir: dict[str, str] = {
     "GPROD": "xs",
     "DA":    "angle",
     "DE":    "energy",
-    "DA/DE": "energy/angle",
+    "DA/DE": "ddx",
     "NU":    "neutrons",
     "DL":    "neutrons",
     "NU/DE": "neutrons/energy",

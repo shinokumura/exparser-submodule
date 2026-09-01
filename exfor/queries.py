@@ -478,11 +478,19 @@ def _exfor_cond_macs(input_store: dict, reaction: str) -> tuple[list, str]:
 def _exfor_cond_sfactor(input_store: dict, reaction: str) -> tuple[list, str]:
     """Extra conditions for astrophysical S-factor datasets.
 
-    EXFOR stores S factors as cross sections (SF6=SIG) with the SFC modifier
-    in SF8.  Keep qualified variants such as SFC/RAW and SFC/AV as well.
+    Include reported S factors and ordinary cross sections that can be
+    converted by Data Explorer. Qualified non-SFC cross sections remain out.
     """
     conditions, reaction = _exfor_cond_xs(input_store, reaction)
-    conditions.append(exfor_indexes.c.sf8.like("SFC%"))
+    if (input_store.get("obs_type") or "").upper() == "SFC":
+        conditions.append(
+            or_(
+                exfor_indexes.c.sf8.like("SFC%"),
+                exfor_indexes.c.sf8.is_(None),
+            )
+        )
+    else:
+        conditions.append(exfor_indexes.c.sf8.like("SFC%"))
     return conditions, reaction
 
 
@@ -734,7 +742,12 @@ def exfor_available_reactions_query(obs_type, elem, mass, projectile):
             exfor_indexes.c.sf5.is_(None),
         ])
     if obs_type == "SFC":
-        queries.append(exfor_indexes.c.sf8.like("SFC%"))
+        queries.append(
+            or_(
+                exfor_indexes.c.sf8.like("SFC%"),
+                exfor_indexes.c.sf8.is_(None),
+            )
+        )
 
     stmt = (
         select(
@@ -789,6 +802,13 @@ def exfor_available_projectiles_query(obs_type, elem=None, mass=None, exclude_pr
         ])
     if obs_type == "SF":
         queries.append(exfor_indexes.c.sf8.like("SFC%"))
+    elif obs_type == "SFC":
+        queries.append(
+            or_(
+                exfor_indexes.c.sf8.like("SFC%"),
+                exfor_indexes.c.sf8.is_(None),
+            )
+        )
 
     stmt = (
         select(
