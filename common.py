@@ -26,6 +26,7 @@ from config import (
 from submodules.utilities.elem import elemtoz
 from submodules.utilities.obs_types import (
     EXFOR_ONLY_FILE_DOWNLOADS,
+    GAMMA_PRODUCTION_MT,
     GAMMA_PRODUCTION_OBS_TYPE,
     GAMMA_PRODUCTION_SF4,
     sf6_to_dir,
@@ -97,12 +98,17 @@ pageparam_to_endftables_obs_type = {
 }
 
 
-LIGHT_ION_PROJECTILES = {
-    "P": "p",
-    "D": "d",
-    "T": "t",
+PARTICLE_PROJECTILE_DIRS = {
+    "0": "0",
     "A": "a",
-    "HE3": "He-3",
+    "D": "d",
+    "E": "e",
+    "G": "g",
+    "H": "h",
+    "HE3": "h",
+    "N": "n",
+    "P": "p",
+    "T": "t",
 }
 
 
@@ -243,8 +249,8 @@ def nuclide_reformat(code):
 
 def projectile_reformat(projectile):
     projectile = str(projectile).upper()
-    if projectile in LIGHT_ION_PROJECTILES:
-        return LIGHT_ION_PROJECTILES[projectile]
+    if projectile in PARTICLE_PROJECTILE_DIRS:
+        return PARTICLE_PROJECTILE_DIRS[projectile]
     return nuclide_reformat(projectile)
 
 
@@ -254,17 +260,7 @@ def _ion_projectile_directory(projectile):
 
 
 def is_ion_projectile(projectile):
-    projectile = str(projectile).upper()
-    # p, d, t and alpha have their own top-level EXFORTABLES_py directories.
-    # He-3 and nuclide projectiles use the shared target-first ``ion`` layout.
-    if projectile in {"P", "D", "T", "A"}:
-        return False
-    if projectile == "HE3":
-        return True
-    if projectile in ("0", "N", "G"):
-        return False
-    parts = projectile.split("-")
-    return len(parts) >= 3 and parts[0].isdigit() and int(parts[0]) > 0
+    return is_heavy_ion_projectile(projectile)
 
 
 def is_heavy_ion_projectile(projectile):
@@ -294,10 +290,12 @@ def generate_exfortables_file_path(input_store):
     )
 
     if obs_type in _EXFOR_SCALAR_GLOBS:
-        reaction_dir = reaction.replace(",", "-").lower()
+        projectile, outgoing = reaction.split(",", 1)
+        projectile_dir = projectile_reformat(projectile)
+        reaction_dir = f"{projectile_dir}-{outgoing.lower()}"
         directory = Path(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            reaction.split(",", 1)[0].lower(),
+            projectile_dir,
             target,
             reaction_dir,
         )
@@ -307,7 +305,9 @@ def generate_exfortables_file_path(input_store):
     path_reaction = (
         convert_partial_reactionstr_to_inl(reaction) if level_num else reaction
     )
-    reaction_dir = path_reaction.replace(",", "-").lower()
+    path_projectile, path_outgoing = path_reaction.split(",", 1)
+    projectile_dir = projectile_reformat(path_projectile)
+    reaction_dir = f"{projectile_dir}-{path_outgoing.lower()}"
     ion_reaction_dir = path_reaction.split(",", 1)[1].lower()
     if level_num:
         reaction_dir += "-L" + str(level_num)
@@ -327,9 +327,9 @@ def generate_exfortables_file_path(input_store):
         fy_type = input_store.get("fy_type")
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            reaction.split(",")[0].lower(),
+            projectile_dir,
             target,
-            reaction.replace(",", "-").lower(),
+            reaction_dir,
             "fission/yield",
             fy_type.lower(),
         )
@@ -337,7 +337,7 @@ def generate_exfortables_file_path(input_store):
     else:
         dir = os.path.join(
             EXFORTABLES_PY_GIT_REPO_PATH,
-            projectile.lower(),
+            projectile_dir,
             target,
             reaction_dir,
             storage_dir if obs_type != "RP" else "xs",
@@ -368,7 +368,7 @@ def generate_exfortables_file_path(input_store):
         else:
             projectile_root = Path(
                 EXFORTABLES_PY_GIT_REPO_PATH,
-                projectile.lower(),
+                projectile_dir,
                 target,
             )
         exfiles = [
@@ -393,10 +393,10 @@ def generate_exfortables_file_path(input_store):
         else:
             reaction_root = Path(
                 EXFORTABLES_PY_GIT_REPO_PATH,
-                projectile.lower(),
+                projectile_dir,
                 target,
             )
-            reaction_pattern = f"{projectile.lower()}-inl*/angle/*.txt"
+            reaction_pattern = f"{projectile_dir}-inl*/angle/*.txt"
         exfiles = [str(file) for file in reaction_root.glob(reaction_pattern)]
 
     else:
@@ -499,8 +499,7 @@ def generate_endftables_file_path(input_store):
     mt = input_store.get("mt")
     page_param = (input_store.get("page_param") or "").upper()
     if (
-        obs_type == GAMMA_PRODUCTION_OBS_TYPE
-        or obs_type in EXFOR_ONLY_FILE_DOWNLOADS
+        obs_type in EXFOR_ONLY_FILE_DOWNLOADS
         or page_param in EXFOR_ONLY_FILE_DOWNLOADS
     ):
         return []
@@ -518,10 +517,14 @@ def generate_endftables_file_path(input_store):
         if selected_libraries
         else LIB_LIST_MAX
     )
-    mts = get_endf_mts(
-        reaction,
-        mt,
-        input_store.get("level_num"),
+    mts = (
+        (GAMMA_PRODUCTION_MT,)
+        if obs_type == GAMMA_PRODUCTION_OBS_TYPE
+        else get_endf_mts(
+            reaction,
+            mt,
+            input_store.get("level_num"),
+        )
     )
     mt_tokens = {f"MT{value:03d}" for value in mts}
     libfiles = []
