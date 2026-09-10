@@ -49,6 +49,7 @@ def _lib_cond_mt(input_store: dict) -> list:
         input_store.get("mt"),
         input_store.get("level_num"),
     )
+    print(mts)
     if len(mts) == 1:
         return [endf_reactions.c.mt == mts[0]]
     return [endf_reactions.c.mt.in_(mts)] if mts else []
@@ -90,12 +91,6 @@ def _lib_cond_trn(input_store: dict) -> list:
     return [endf_reactions.c.mt == 1]
 
 
-# def _lib_cond_resonance(input_store: dict) -> list:
-#     """Extra conditions for resonance parameters query."""
-#     [endf_reactions.c.residual == residual]
-#     return 
-
-
 # Maps the page-level obs_type key to the corresponding endf_reactions.obs_type
 # column value and a callable that returns any additional query conditions.
 # db_obs_type=None means no endf_reactions entry — use resonancetable_data instead.
@@ -105,7 +100,6 @@ LIB_OBS_TYPE_CONDITION: dict = {
         "db_obs_type": "gamma_production",
         "extra": _lib_cond_mt,
     },
-    "SF":   {"db_obs_type": "xs",       "extra": _lib_cond_mt},
     "SFC":  {"db_obs_type": "xs",       "extra": _lib_cond_mt},
     "RP":   {"db_obs_type": "residual", "extra": _lib_cond_residual},
     "DA":   {"db_obs_type": "angle",    "extra": _lib_cond_mt},
@@ -516,12 +510,12 @@ def lib_da_distinct_query(ids):
     })
 
 
-def lib_da_data_query_at_energy(ids, en_target):
-    """Return all angle rows exactly at the selected incident energy."""
+def lib_da_data_query_at_energy(ids, en_target, tolerance_pct=0):
+    """Return each reaction's nearest energy slice within the selected bin."""
     if en_target is None:
         return pd.DataFrame()
     t = float(en_target)
-    tol = max(abs(t) * 1e-10, 1e-12)
+    tol = max(abs(t) * float(tolerance_pct) / 100, abs(t) * 1e-10, 1e-12)
     stmt = select(endf_angle_data).where(
         and_(
             endf_angle_data.c.reaction_id.in_(ids),
@@ -532,6 +526,21 @@ def lib_da_data_query_at_energy(ids, en_target):
         df = pd.DataFrame(
             conn.execute(stmt).fetchall(), columns=stmt.selected_columns.keys()
         )
+    if not df.empty:
+        metadata_stmt = select(
+            endf_reactions.c.reaction_id,
+            endf_reactions.c.evaluation,
+            endf_reactions.c.mt,
+        ).where(endf_reactions.c.reaction_id.in_(ids))
+        with engines["endftables"].connect() as conn:
+            metadata = {
+                row.reaction_id: (row.evaluation, row.mt)
+                for row in conn.execute(metadata_stmt)
+            }
+        distances = (df["en_inc"] - t).abs()
+        groups = df["reaction_id"].map(metadata)
+        nearest = distances.groupby(groups).transform("min")
+        df = df[np.isclose(distances, nearest, rtol=1e-10, atol=1e-12)]
     return df
 
 

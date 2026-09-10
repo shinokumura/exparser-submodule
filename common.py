@@ -571,11 +571,32 @@ def generate_endftables_file_path(input_store):
 
     if obs_type == "DA" and input_store.get("inc_en") is not None:
         target_energy = float(input_store["inc_en"])
-        matching_files = []
+        tolerance_pct = float(
+            input_store.get("lib_inc_en_tolerance_pct") or 0
+        )
+        tolerance = max(abs(target_energy) * tolerance_pct / 100, 5e-4)
+        candidates = []
         for file in libfiles:
             match = re.search(r"-Eang([0-9.]+)\.", Path(file).name)
-            if match and abs(float(match.group(1)) - target_energy) <= 5e-4:
-                matching_files.append(file)
+            mt_match = re.search(r"-MT(\d{3})-", Path(file).name)
+            if match and mt_match:
+                energy = float(match.group(1))
+                if abs(energy - target_energy) <= tolerance:
+                    candidates.append((file, energy, mt_match.group(1)))
+        matching_files = []
+        groups = {}
+        for file, energy, mt_token in candidates:
+            library = next(
+                (lib for lib in libraries if f".{lib}.txt" in Path(file).name),
+                "",
+            )
+            groups.setdefault((library, mt_token), []).append((file, energy))
+        for files in groups.values():
+            nearest = min(abs(energy - target_energy) for _, energy in files)
+            matching_files.extend(
+                file for file, energy in files
+                if abs(abs(energy - target_energy) - nearest) <= 1e-12
+            )
         libfiles = matching_files
 
     if obs_type == "FY" and input_store.get("energy_range"):
