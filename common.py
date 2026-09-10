@@ -61,7 +61,7 @@ LIB_LIST_MAX = {
     "jeff4.0": "JEFF-4.0",
     "jendl5.0": "JENDL-5.0",
     # "jendl4.0",
-    "iaea.2022": "IAEA-2022",
+    "iaea.2024": "IAEA-2024",
     # "iaea.2019",
     "cendl3.2": "CENDL-3.2",
     "irdff2.0": "IRDFF-2.0",
